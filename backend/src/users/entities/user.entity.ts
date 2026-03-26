@@ -3,11 +3,12 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Role } from '../../rbac/rbac.types';
 import { TierName } from '../../tier-config/entities/tier-config.entity';
 
+/** @deprecated Use {@link Role} from `rbac.types` (matches DB enum). */
 export enum UserRole {
   USER = 'user',
   MERCHANT = 'merchant',
   ADMIN = 'admin',
-  SUPERADMIN = 'superadmin',
+  SUPERADMIN = 'super_admin',
 }
 
 export enum KycStatus {
@@ -59,16 +60,24 @@ export class User extends BaseEntity {
 
   @Column({ type: 'enum', enum: Role, default: Role.User })
   role!: Role;
+
   @Column({ name: 'is_merchant', default: false })
   isMerchant!: boolean;
 
-  @Column({
-    type: 'enum',
-    enum: UserRole,
-    default: UserRole.USER,
-  })
-  role!: UserRole;
-
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
+
+  // ── Security Features ────────────────────────────────────────
+
+  @Column({ name: 'email_verified', default: false })
+  emailVerified!: boolean;
+
+  @Column({ name: 'phone_verified', default: false })
+  phoneVerified!: boolean;
+
+  @Column({ name: 'pin_hash', length: 255, nullable: true, default: null })
+  pinHash!: string | null;
+
+  @Column({ name: 'passkey_id', length: 255, nullable: true, default: null })
+  passkeyId!: string | null;
 }

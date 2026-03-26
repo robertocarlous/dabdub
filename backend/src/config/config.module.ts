@@ -10,6 +10,7 @@ import { zeptoConfig } from './zepto.config';
 import { r2Config } from './r2.config';
 import { flutterwaveConfig } from './flutterwave.config';
 import { paystackConfig } from './paystack.config';
+import { firebaseConfig } from './firebase.config';
 
 /**
  * Combined Joi validation schema for all environment variables.
@@ -117,6 +118,9 @@ const validationSchema = Joi.object({
     .uri()
     .default('https://api.flutterwave.com'),
 
+  // ── Firebase ─────────────────────────────────────────────────────────────
+  FIREBASE_SERVICE_ACCOUNT: Joi.string().required().messages({ 'any.required': 'FIREBASE_SERVICE_ACCOUNT is required' }),
+
   // ── Paystack ──────────────────────────────────────────────────────────────
   PAYSTACK_SECRET_KEY: Joi.string()
     .required()
@@ -140,6 +144,7 @@ const validationSchema = Joi.object({
         r2Config,
         flutterwaveConfig,
         paystackConfig,
+        firebaseConfig,
       ],
       validationSchema,
       validationOptions: { abortEarly: false },

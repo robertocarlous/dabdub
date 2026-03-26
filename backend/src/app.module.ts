@@ -27,6 +27,8 @@ import { PayLinkModule } from './paylink/paylink.module';
 import { AdminModule } from './admin/admin.module';
 import { EarningsModule } from './earnings/earnings.module';
 import { SmsModule } from './sms/sms.module';
+import { PushModule } from './push/push.module';
+import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 
 @Module({
   imports: [
@@ -36,7 +38,7 @@ import { SmsModule } from './sms/sms.module';
     // 1b. Logging — Winston + Nest bridge.
     LoggingModule,
 
-    // 2. Database — owns the TypeORM root connection; see database.module.ts.
+    // 2. Database — owns the TypeORM root connection; see databasle.ts.
     DatabaseModule,
 
     // 4. Bull — async Redis connection via typed RedisConfig.
@@ -76,7 +78,7 @@ import { SmsModule } from './sms/sms.module';
     // 8. Auth — register/login/refresh/logout + global JWT guard.
     AuthModule,
 
-    // 6. File uploads — presign + confirm via Cloudflare R2.
+    // 6. File presign + confirm via Cloudflare R2.
     UploadModule,
 
     // 7. WebSockets — Socket.io real-time gateway.
@@ -101,6 +103,13 @@ import { SmsModule } from './sms/sms.module';
     // 10. SMS — OTP + transaction alerts via Termii + BullMQ.
     SmsModule,
 
+    // 11. Push — Firebase Cloud Messaging device token management.
+    PushModule,
+
+    // 12. Earnings — yield dashboard, APY display, projections.
+    EarningsModule,
+
+    WithdrawalsModule,
     AdminModule,
 
     // 10. Earnings — yield dashboard, APY display, projections.
@@ -119,6 +128,6 @@ import { SmsModule } from './sms/sms.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+    consumer.ionIdMiddleware).forRoutes('*');
   }
 }

@@ -39,6 +39,7 @@ import { SecurityModule } from './security/security.module';
 import { TransactionModule } from './transactions/transactions.module';
 import { PushModule } from './push/push.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 
 @Module({
   imports: [
@@ -135,8 +136,12 @@ import { WithdrawalsModule } from './withdrawals/withdrawals.module';
     // Transactions — activity history with cursor-based pagination.
     // Passkey/WebAuthn authentication.
     PasskeyModule,
-    // 11. Transactions — activity history with cursor-based pagination.
+
+    // Transactions — activity history with cursor-based pagination.
     TransactionModule,
+
+    // Waitlist — viral pre-launch signups with referral points.
+    WaitlistModule,
   ],
   providers: [
     {

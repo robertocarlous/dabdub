@@ -40,6 +40,7 @@ import { TransactionModule } from './transactions/transactions.module';
 import { PushModule } from './push/push.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { KycModule } from './kyc/kyc.module';
 
 @Module({
   imports: [
@@ -141,6 +142,9 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 
     // Waitlist — viral pre-launch signups with referral points.
     WaitlistModule,
+
+    // KYC — document submission and admin review for tier upgrades.
+    KycModule,
   ],
   providers: [
     {

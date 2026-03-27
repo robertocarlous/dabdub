@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { UserResponseDto } from './dto/user-response.dto';
 
 @Injectable()
 export class UsersService {
@@ -99,6 +98,18 @@ export class UsersService {
   async deactivate(id: string): Promise<User> {
     const user = await this.findById(id);
     user.isActive = false;
+    return this.usersRepository.save(user);
+  }
+
+  async markEmailVerified(id: string): Promise<User> {
+    const user = await this.findById(id);
+    user.emailVerified = true;
+    return this.usersRepository.save(user);
+  }
+
+  async markPhoneVerified(id: string): Promise<User> {
+    const user = await this.findById(id);
+    user.phoneVerified = true;
     return this.usersRepository.save(user);
   }
 }

@@ -15,9 +15,11 @@ describe('UsersService', () => {
   const mockUser: User = {
     id: '550e8400-e29b-41d4-a716-446655440000',
     email: 'test@example.com',
+    emailVerified: false,
     username: 'testuser',
     displayName: 'Test User',
     phone: '+234801234567',
+    phoneVerified: false,
     passwordHash: 'hashed_password_123',
     tier: TierName.SILVER,
     kycStatus: KycStatus.NONE,
@@ -55,12 +57,14 @@ describe('UsersService', () => {
 
   describe('findById', () => {
     it('should return user when found', async () => {
-      jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
+      const findOneSpy = jest
+        .spyOn(repository, 'findOne')
+        .mockResolvedValue(mockUser);
 
       const result = await service.findById(mockUser.id);
 
       expect(result).toEqual(mockUser);
-      expect(repository.findOne).toHaveBeenCalledWith({
+      expect(findOneSpy).toHaveBeenCalledWith({
         where: { id: mockUser.id },
       });
     });
@@ -76,12 +80,14 @@ describe('UsersService', () => {
 
   describe('findByEmail', () => {
     it('should return user when email found', async () => {
-      jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
+      const findOneSpy = jest
+        .spyOn(repository, 'findOne')
+        .mockResolvedValue(mockUser);
 
       const result = await service.findByEmail(mockUser.email);
 
       expect(result).toEqual(mockUser);
-      expect(repository.findOne).toHaveBeenCalledWith({
+      expect(findOneSpy).toHaveBeenCalledWith({
         where: { email: mockUser.email },
       });
     });
@@ -97,12 +103,14 @@ describe('UsersService', () => {
 
   describe('findByUsername', () => {
     it('should return user when username found', async () => {
-      jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
+      const findOneSpy = jest
+        .spyOn(repository, 'findOne')
+        .mockResolvedValue(mockUser);
 
       const result = await service.findByUsername(mockUser.username);
 
       expect(result).toEqual(mockUser);
-      expect(repository.findOne).toHaveBeenCalledWith({
+      expect(findOneSpy).toHaveBeenCalledWith({
         where: { username: mockUser.username },
       });
     });
@@ -156,14 +164,21 @@ describe('UsersService', () => {
     it('should update displayName', async () => {
       const updatedUser = { ...mockUser, displayName: 'Updated Display Name' };
       jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
-      jest.spyOn(repository, 'save').mockResolvedValue(updatedUser);
+      const saveSpy = jest
+        .spyOn(repository, 'save')
+        .mockResolvedValue(updatedUser);
 
       const result = await service.update(mockUser.id, {
         displayName: 'Updated Display Name',
       });
 
       expect(result.displayName).toBe('Updated Display Name');
-      expect(repository.save).toHaveBeenCalledWith(expect.any(User));
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: mockUser.id,
+          displayName: 'Updated Display Name',
+        }),
+      );
     });
 
     it('should update phone', async () => {
@@ -209,12 +224,14 @@ describe('UsersService', () => {
     it('should set isActive to false', async () => {
       const deactivatedUser = { ...mockUser, isActive: false };
       jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
-      jest.spyOn(repository, 'save').mockResolvedValue(deactivatedUser);
+      const saveSpy = jest
+        .spyOn(repository, 'save')
+        .mockResolvedValue(deactivatedUser);
 
       const result = await service.deactivate(mockUser.id);
 
       expect(result.isActive).toBe(false);
-      expect(repository.save).toHaveBeenCalled();
+      expect(saveSpy).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if user does not exist', async () => {
@@ -226,12 +243,41 @@ describe('UsersService', () => {
     });
   });
 
+  describe('markEmailVerified', () => {
+    it('should set emailVerified to true', async () => {
+      const verifiedUser = { ...mockUser, emailVerified: true };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
+      const saveSpy = jest
+        .spyOn(repository, 'save')
+        .mockResolvedValue(verifiedUser);
+
+      const result = await service.markEmailVerified(mockUser.id);
+
+      expect(result.emailVerified).toBe(true);
+      expect(saveSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('markPhoneVerified', () => {
+    it('should set phoneVerified to true', async () => {
+      const verifiedUser = { ...mockUser, phoneVerified: true };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(mockUser);
+      const saveSpy = jest
+        .spyOn(repository, 'save')
+        .mockResolvedValue(verifiedUser);
+
+      const result = await service.markPhoneVerified(mockUser.id);
+
+      expect(result.phoneVerified).toBe(true);
+      expect(saveSpy).toHaveBeenCalled();
+    });
+  });
+
   describe('UserResponseDto', () => {
     it('should never contain passwordHash', () => {
       const dto = UserResponseDto.fromEntity(mockUser);
 
       expect(dto).not.toHaveProperty('passwordHash');
-      expect((dto as any).passwordHash).toBeUndefined();
     });
 
     it('should contain all required public fields', () => {
@@ -254,8 +300,6 @@ describe('UsersService', () => {
 
       expect(dto).not.toHaveProperty('isAdmin');
       expect(dto).not.toHaveProperty('isTreasury');
-      expect((dto as any).isAdmin).toBeUndefined();
-      expect((dto as any).isTreasury).toBeUndefined();
     });
 
     it('should handle null displayName and phone', () => {

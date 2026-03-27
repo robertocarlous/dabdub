@@ -134,6 +134,7 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
 
     // SMS — OTP + transaction alerts via Termii + BullMQ.
     SmsModule,
+    OtpModule,
 
     // Push — Firebase Cloud Messaging device token management.
     PushModule,

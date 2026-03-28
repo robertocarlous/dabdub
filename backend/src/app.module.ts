@@ -210,6 +210,7 @@ import { SplitsModule } from './splits/splits.module';
     // Splits — split payment requests among multiple users.
     SplitsModule,
     ProfileModule,
+    SettlementModule,
   ],
 
   providers: [

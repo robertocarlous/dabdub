@@ -1,52 +1,50 @@
-# Merchant POS QR Implementation TODO
+# Merchant Settlement History Module - Implementation Plan
 
-Approved plan breakdown into logical steps. Mark [x] as you complete.
+## Status: ✅ In Progress
 
-## Profile Module (Previous)
+### 1. [ ] Create backend/src/settlement/entities/settlement.entity.ts
 
-- [x] Migration, entities, DTOs, service/controller/module
+- TypeORM entity with all AC fields + indexes matching migration
 
-## Merchant POS QR (100% Implementation)
+### 2. [ ] Create DTOs in backend/src/settlement/dto/
 
-**1. [x] Create DTOs & Update public DTO**
+- settlement-detail.dto.ts
+- settlements-query.dto.ts (pagination + filters)
+- summary.dto.ts
+- monthly-breakdown.dto.ts
 
-- ✓ pos-qr-query.dto.ts
-- ✓ pos-qr-response.dto.ts
-- ✓ merchant-public-profile.dto.ts (+ username, tier, logoUrl)
+### 3. [ ] Implement SettlementHistoryService
 
-**2. [x] Extend QrService**
+- backend/src/settlement/settlement-history.service.ts
+- getMerchantSettlements(merchantId, query)
+- getSummary(merchantId)
+- getMonthlyBreakdown(merchantId)
 
-- ✓ backend/src/qr/qr.service.ts: renderQr public, generatePosQr(username, merchantId, amount?, note?)
-- ✓ POS persistent cache `pos:qr:{merchantId}` TTL 86400
-- Cache: !amount ? `pos:qr:${merchantId}` TTL 86400 : unique hash
-- Return {qrDataUrl, paymentUrl, username, businessName, logoUrl?, tier, isVerified}
+### 4. [ ] Create Controllers
 
-**3. [x] Create MerchantPosService**
+- backend/src/settlement/settlement.controller.ts
+- /merchant/settlements\*, /merchant/settlements/summary, /merchant/settlements/breakdown
+- /admin/settlements\*, /admin/settlements/pending
 
-- ✓ backend/src/merchants/merchant-pos.service.ts: getPosQr(user), getPosQrWithAmount, regenerate
-- ✓ Composes QrService + merchant/user data + logoUrl placeholder
+### 5. [ ] Create Module
 
-- backend/src/merchants/merchant-pos.service.ts: getPosQr(user: User), getPosQrWithAmount(merchantId, amount, note), regenerate(merchantId: del cache)
+- backend/src/settlement/settlement.module.ts
+- Import TypeOrmModule.forFeature([Settlement]), dependencies
 
-**4. [x] Update MerchantsController**
+### 6. [ ] Update app.module.ts
 
-- ✓ backend/src/merchants/merchants.controller.ts:
-  - ✓ GET /merchants/me/pos-qr (?amount=?&note=)
-  - ✓ POST /merchants/me/pos-qr/regenerate
-  - ✓ GET /merchants/:username/pay -> public full DTO
+- Add import SettlementModule
 
-**5. [x] Update merchants.module.ts**
+### 7. [ ] Clean up starter files
 
-- ✓ Add QrModule import, MerchantPosService provider/export
+- Delete cron.ts, settlement.service.ts, settlement.worker.ts, settlement.entity.ts
 
-**6. [x] Unit Tests**
+### 8. [ ] Add Unit Tests
 
-- ✓ merchant-pos.service.spec.ts stub for AC tests
-- Tests: cache hit second call, unique one-time, non-merchant forbidden, regenerate del key
+- settlement-history.service.spec.ts (AC test cases)
 
-**7. [ ] Verify**
+### 9. [ ] Follow-up
 
-- npm test merchants qr
-- Manual test endpoints
-
-**8. [x] Complete**
+- Run migrations if needed
+- npm run test
+- Manual endpoint testing

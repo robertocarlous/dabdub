@@ -27,6 +27,7 @@ const VALID_ENV: NodeJS.ProcessEnv = {
   BULL_BOARD_USERNAME: 'queue-admin',
   BULL_BOARD_PASSWORD: 'queue-password',
 
+  STELLAR_NETWORK: 'testnet',
   JWT_ACCESS_SECRET: 'access-secret-that-is-at-least-32-chars!!',
   JWT_REFRESH_SECRET: 'refresh-secret-that-is-at-least-32-chars!',
   JWT_ACCESS_EXPIRY: '15m',
@@ -145,6 +146,7 @@ describe('AppConfigModule', () => {
   });
 
   it('returns correct Stellar, Zepto, and R2 config values', () => {
+    expect(config.get<string>('stellar.network')).toBe('testnet');
     expect(config.get<string>('stellar.rpcUrl')).toBe(
       'https://soroban-testnet.stellar.org',
     );
@@ -199,6 +201,15 @@ describe('AppConfigModule', () => {
   it('throws when STELLAR_RPC_URL is not a valid URI', async () => {
     clearEnv();
     applyEnv({ STELLAR_RPC_URL: 'not-a-url' });
+
+    await expect(
+      Test.createTestingModule({ imports: [AppConfigModule] }).compile(),
+    ).rejects.toThrow();
+  });
+
+  it('throws when STELLAR_NETWORK is invalid', async () => {
+    clearEnv();
+    applyEnv({ STELLAR_NETWORK: 'invalid-network' });
 
     await expect(
       Test.createTestingModule({ imports: [AppConfigModule] }).compile(),

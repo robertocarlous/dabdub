@@ -13,6 +13,7 @@ import { HealthModule } from './health/health.module';
 import { SorobanModule } from './soroban/soroban.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { StellarModule } from './stellar/stellar.module';
 import { UploadModule } from './uploads/upload.module';
 import { WsModule } from './ws/ws.module';
 import { QueueModule } from './queue/queue.module';
@@ -66,6 +67,8 @@ import { PwaModule } from './pwa/pwa.module';
 import { SecurityHeadersMiddleware } from './security/security-headers.middleware';
 import { ComplianceModule } from './compliance/compliance.module';
 import { UsernameModule } from './username/username.module';
+import { SplitsModule } from './splits/splits.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -113,12 +116,18 @@ import { UsernameModule } from './username/username.module';
     SorobanModule,
     CronModule,
 
+    StellarModule,
+
+    // 5. Auth — register/login/refresh/logout + global JWT guard.
     // 6. Email — async transactional delivery via ZeptoMail + BullMQ.
     EmailModule,
 
     // 7. Rates — USDC/NGN live rates with Redis cache + BullMQ polling.
     RatesModule,
 
+    StellarModule,
+
+    // 5. Auth — register/login/refresh/logout + global JWT guard.
     // 8. Auth — register/login/refresh/logout + global JWT guard.
     AuthModule,
 
@@ -199,7 +208,14 @@ import { UsernameModule } from './username/username.module';
 
     // Wallets — Stellar keypair provisioning + balance sync.
     WalletsModule,
+
     UsernameModule,
+
+
+    // Splits — split payment requests among multiple users.
+    SplitsModule,
+    FeedbackModule,
+
   ],
   providers: [
     {

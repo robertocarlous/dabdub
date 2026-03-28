@@ -87,6 +87,12 @@ const validationSchema = Joi.object({
     .uri()
     .required()
     .messages({ 'any.required': 'STELLAR_RPC_URL is required' }),
+  STELLAR_NETWORK: Joi.string()
+    .valid('testnet', 'mainnet')
+    .default('testnet')
+    .messages({
+      'any.only': 'STELLAR_NETWORK must be testnet | mainnet',
+    }),
   STELLAR_NETWORK_PASSPHRASE: Joi.string()
     .required()
     .messages({ 'any.required': 'STELLAR_NETWORK_PASSPHRASE is required' }),

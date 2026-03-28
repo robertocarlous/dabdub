@@ -29,6 +29,7 @@ import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
 import { PayLinkModule } from './paylink/paylink.module';
 import { ReceiveModule } from './receive/receive.module';
 import { VirtualAccountModule } from './virtual-account/virtual-account.module';
+import { VirtualCardsModule } from './virtual-cards/virtual-cards.module';
 import { AuditModule } from './audit/audit.module';
 import { AppConfigModule as RuntimeConfigModule } from './app-config/app-config.module';
 import { MaintenanceModeMiddleware } from './app-config/middleware/maintenance-mode.middleware';
@@ -40,6 +41,13 @@ import { TransfersModule } from './transfers/transfers.module';
 import { WithdrawalsModule } from './withdrawals/withdrawals.module';
 import { PasskeyModule } from './passkey/passkey.module';
 import { SecurityModule } from './security/security.module';
+import { SandboxModule } from './sandbox/sandbox.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+
+// TODO: Enable Sentry when @sentry/nestjs module is compatible
+// import { SentryModule } from '@sentry/nestjs';
+import { AlertModule } from './alert/alert.module';
+import { GroupsModule } from './groups/groups.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { PushModule } from './push/push.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
@@ -48,6 +56,15 @@ import { ReportsModule } from './reports/reports.module';
 import { WalletsModule } from './wallets/wallets.module';
 import { ApiVersionModule } from './api-version/api-version.module';
 import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers.interceptor';
+import { CronModule } from './cron/cron.module';
+import { ActivityModule } from './activity/activity.module';
+import { BalanceModule } from './balance/balance.module';
+import { SentryModule as SentryUserContextModule } from './sentry/sentry.module';
+import { SentryUserMiddleware } from './sentry/sentry-user.middleware';
+import { OtpModule } from './otp/otp.module';
+import { PwaModule } from './pwa/pwa.module';
+import { SecurityHeadersMiddleware } from './security/security-headers.middleware';
+import { ComplianceModule } from './compliance/compliance.module';
 
 @Module({
   imports: [
@@ -93,6 +110,7 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
     HealthModule,
     ApiVersionModule,
     SorobanModule,
+    CronModule,
 
     // 6. Email — async transactional delivery via ZeptoMail + BullMQ.
     EmailModule,
@@ -124,8 +142,13 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
     TransfersModule,
     WithdrawalsModule,
     SecurityModule,
+    SandboxModule,
+    MaintenanceModule,
+    AlertModule,
+    GroupsModule,
     BankAccountsModule,
     VirtualAccountModule,
+    VirtualCardsModule,
     PayLinkModule,
     ReceiveModule,
 
@@ -134,7 +157,7 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
     // Runtime feature flags + maintenance mode.
     RuntimeConfigModule,
 
-    AdminModule,
+    AdminModule, // Includes AnalyticsModule
 
     // SMS — OTP + transaction alerts via Termii + BullMQ.
     SmsModule,
@@ -142,6 +165,7 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
 
     // Push — Firebase Cloud Messaging device token management.
     PushModule,
+    PwaModule,
 
     // Earnings — yield dashboard, APY display, projections.
     EarningsModule,
@@ -163,6 +187,14 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
 
     // Reports — async CSV data exports via BullMQ + R2.
     ReportsModule,
+
+    // Activity — chronological feed with cursor pagination, summary, and breakdown.
+    ActivityModule,
+    // Balance — unified balance aggregation with caching.
+    BalanceModule,
+    // Sentry user context module
+    SentryUserContextModule,
+    ComplianceModule,
 
     // Wallets — Stellar keypair provisioning + balance sync.
     WalletsModule,
@@ -191,5 +223,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(CorrelationIdMiddleware).forRoutes('*');
     consumer.apply(MaintenanceModeMiddleware).forRoutes('*');
+    consumer.apply(SentryUserMiddleware).forRoutes('*');
+    consumer.apply(SecurityHeadersMiddleware).forRoutes('*');
   }
 }

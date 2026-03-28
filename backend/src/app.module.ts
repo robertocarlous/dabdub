@@ -47,6 +47,8 @@ import { ReportsModule } from './reports/reports.module';
 import { WalletsModule } from './wallets/wallets.module';
 import { ApiVersionModule } from './api-version/api-version.module';
 import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers.interceptor';
+import { SentryModule as SentryUserContextModule } from './sentry/sentry.module';
+import { SentryUserMiddleware } from './sentry/sentry-user.middleware';
 import { OtpModule } from './otp/otp.module';
 import { PwaModule } from './pwa/pwa.module';
 import { SecurityHeadersMiddleware } from './security/security-headers.middleware';
@@ -165,6 +167,9 @@ import { ComplianceModule } from './compliance/compliance.module';
 
     // Reports — async CSV data exports via BullMQ + R2.
     ReportsModule,
+
+    // Sentry user context module
+    SentryUserContextModule,
     ComplianceModule,
 
     // Wallets — Stellar keypair provisioning + balance sync.
@@ -193,6 +198,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(CorrelationIdMiddleware).forRoutes('*');
     consumer.apply(MaintenanceModeMiddleware).forRoutes('*');
+    consumer.apply(SentryUserMiddleware).forRoutes('*');
     consumer.apply(SecurityHeadersMiddleware).forRoutes('*');
   }
 }

@@ -23,7 +23,6 @@ import type { TokenResponseDto } from './dto/token-response.dto';
 export interface JwtPayload {
   sub: string;
   username: string;
-  role: 'admin' | 'merchant' | 'user';
   role: 'user' | 'merchant' | 'admin' | 'super_admin';
   sessionId: string;
 }

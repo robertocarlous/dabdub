@@ -85,6 +85,25 @@ export class UsersService {
       user.displayName = dto.displayName;
     }
 
+    if (dto.bio !== undefined) {
+      if (typeof dto.bio === 'string' && dto.bio.length > 160) {
+        throw new BadRequestException('Bio must be max 160 characters');
+      }
+      user.bio = dto.bio;
+    }
+
+    if (dto.avatarKey !== undefined) {
+      user.avatarKey = dto.avatarKey;
+    }
+
+    if (dto.twitterHandle !== undefined) {
+      user.twitterHandle = dto.twitterHandle;
+    }
+
+    if (dto.instagramHandle !== undefined) {
+      user.instagramHandle = dto.instagramHandle;
+    }
+
     if (dto.phone !== undefined) {
       user.phone = dto.phone;
     }

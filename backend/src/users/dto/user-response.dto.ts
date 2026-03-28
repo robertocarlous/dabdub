@@ -34,12 +34,40 @@ export class UserResponseDto {
   })
   displayName!: string | null;
 
-  @ApiProperty({
+@ApiProperty({
     description: 'Phone number in E.164 format',
     example: '+234801234567',
     nullable: true,
   })
   phone!: string | null;
+
+  @ApiProperty({
+    description: 'Bio',
+    example: 'Crypto enthusiast',
+    nullable: true,
+  })
+  bio!: string | null;
+
+  @ApiProperty({
+    description: 'Avatar R2 key',
+    example: 'avatar/user123/image.jpg',
+    nullable: true,
+  })
+  avatarKey!: string | null;
+
+  @ApiProperty({
+    description: 'Twitter handle',
+    example: 'johndoe',
+    nullable: true,
+  })
+  twitterHandle!: string | null;
+
+  @ApiProperty({
+    description: 'Instagram handle',
+    example: 'johndoe',
+    nullable: true,
+  })
+  instagramHandle!: string | null;
 
   @ApiProperty({
     description: 'User tier (Silver, Gold, Black)',
@@ -83,6 +111,10 @@ export class UserResponseDto {
     dto.email = user.email;
     dto.username = user.username;
     dto.displayName = user.displayName;
+    dto.bio = user.bio;
+    dto.avatarKey = user.avatarKey;
+    dto.twitterHandle = user.twitterHandle;
+    dto.instagramHandle = user.instagramHandle;
     dto.phone = user.phone;
     dto.tier = user.tier;
     dto.kycStatus = user.kycStatus;

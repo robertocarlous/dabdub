@@ -42,8 +42,20 @@ export class User extends BaseEntity {
   @Column({ name: 'phone_verified', default: false })
   phoneVerified!: boolean;
 
-  @Column({ name: 'display_name', length: 100, nullable: true, default: null })
+@Column({ name: 'display_name', length: 100, nullable: true, default: null })
   displayName!: string | null;
+
+  @Column({ length: 160, nullable: true, default: null })
+  bio!: string | null;
+
+  @Column({ name: 'avatar_key', length: 255, nullable: true, default: null })
+  avatarKey!: string | null;
+
+  @Column({ name: 'twitter_handle', length: 50, nullable: true, default: null })
+  twitterHandle!: string | null;
+
+  @Column({ name: 'instagram_handle', length: 50, nullable: true, default: null })
+  instagramHandle!: string | null;
 
   @Column({
     type: 'enum',

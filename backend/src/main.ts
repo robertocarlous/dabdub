@@ -53,8 +53,7 @@ function scrubPII(obj: unknown): unknown {
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-  
+
   // Initialize Sentry before app bootstrap
   const sentryDsn = process.env.SENTRY_DSN;
   if (sentryDsn) {
@@ -64,9 +63,7 @@ async function bootstrap(): Promise<void> {
       release: version,
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
       profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-      integrations: [
-        nodeProfilingIntegration(),
-      ],
+      integrations: [nodeProfilingIntegration()],
       beforeSend(event) {
         // Scrub PII from all captured events
         if (event.request) {
@@ -89,7 +86,7 @@ async function bootstrap(): Promise<void> {
     logger.warn('Sentry disabled: SENTRY_DSN not set');
   }
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));

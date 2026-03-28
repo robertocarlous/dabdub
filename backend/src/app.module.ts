@@ -228,6 +228,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     FeedbackModule,
 
   ],
+
   providers: [
     {
       provide: APP_GUARD,

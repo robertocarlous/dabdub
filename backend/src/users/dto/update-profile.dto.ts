@@ -17,7 +17,7 @@ export class UpdateProfileDto {
   @MaxLength(50)
   displayName?: string;
 
-  @ApiPropertyOptional({
+@ApiPropertyOptional({
     description: 'Phone number in E.164 format',
     example: '+234801234567',
     pattern: '^\\+[1-9]\\d{1,14}$',
@@ -28,4 +28,41 @@ export class UpdateProfileDto {
     message: 'Phone must be in E.164 format (e.g., +234801234567)',
   })
   phone?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Bio (max 160 chars)', 
+    example: 'Crypto enthusiast',
+    maxLength: 160 
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  bio?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'R2 avatar key',
+    example: 'avatar/user123/image.jpg'
+  })
+  @IsOptional()
+  @IsString()
+  avatarKey?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Twitter handle without @',
+    example: 'johndoe'
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-zA-Z0-9_]{1,15}$/, { message: 'Invalid Twitter handle' })
+  twitterHandle?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Instagram handle',
+    example: 'johndoe'
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-zA-Z0-9_.]{1,30}$/, { message: 'Invalid Instagram handle' })
+  instagramHandle?: string;
 }
+

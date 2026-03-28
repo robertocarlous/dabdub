@@ -1,4 +1,4 @@
-export const DISPOSABLE_DOMAINS = [
+export const DISPOSABLE_DOMAINS = new Set([
   // Common disposable email providers
   'mailinator.com', 'guerrillamail.com', 'tempmail.com', 'throwaway.email',
   'yopmail.com', 'sharklasers.com', 'guerrillamailblock.com', 'grr.la',
@@ -53,4 +53,4 @@ export const DISPOSABLE_DOMAINS = [
   'yopmail.net', 'ypmail.webarnak.fr.eu.org', 'zehnminuten.de', 'zippymail.info',
   'zoemail.com', 'zoemail.net', 'zoemail.org', 'zoetropes.org',
   'zomg.info', 'zxcv.com', 'zzz.com',
-];
+]);

@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { WaitlistService } from './waitlist.service';
+import { WaitlistFraudService } from './waitlist-fraud.service';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { RankResponseDto } from './dto/rank-response.dto';
 import { LeaderboardEntryDto } from './dto/leaderboard-entry.dto';
@@ -21,7 +22,10 @@ import { SuperAdminGuard } from '../common/guards/super-admin.guard';
 @ApiTags('waitlist')
 @Controller({ version: '1' })
 export class WaitlistController {
-  constructor(private readonly waitlistService: WaitlistService) {}
+  constructor(
+    private readonly waitlistService: WaitlistService,
+    private readonly fraudService: WaitlistFraudService,
+  ) {}
 
   @Public()
   @Post('waitlist/join')

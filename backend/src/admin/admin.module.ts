@@ -11,6 +11,9 @@ import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { EmailModule } from '../email/email.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AdminAuthModule } from './auth/admin-auth.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { CronModule } from '../cron/cron.module';
+import { CronAdminController } from './cron-admin.controller';
 import { AuditModule } from '../audit/audit.module';
 
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -30,6 +33,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
     AdminAuthModule,
     AuditModule,
     AnalyticsModule,
+    CronModule,
+  ],
+  providers: [AdminService],
+  controllers: [AdminController, CronAdminController],
   ],
   providers: [AdminService],
   controllers: [AdminController],

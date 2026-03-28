@@ -48,6 +48,7 @@ import { ReportsModule } from './reports/reports.module';
 import { WalletsModule } from './wallets/wallets.module';
 import { ApiVersionModule } from './api-version/api-version.module';
 import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers.interceptor';
+import { CronModule } from './cron/cron.module';
 import { ActivityModule } from './activity/activity.module';
 import { BalanceModule } from './balance/balance.module';
 import { SentryModule as SentryUserContextModule } from './sentry/sentry.module';
@@ -99,6 +100,7 @@ import { ComplianceModule } from './compliance/compliance.module';
     HealthModule,
     ApiVersionModule,
     SorobanModule,
+    CronModule,
 
     // 6. Email — async transactional delivery via ZeptoMail + BullMQ.
     EmailModule,

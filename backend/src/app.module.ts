@@ -66,6 +66,7 @@ import { OtpModule } from './otp/otp.module';
 import { PwaModule } from './pwa/pwa.module';
 import { SecurityHeadersMiddleware } from './security/security-headers.middleware';
 import { ComplianceModule } from './compliance/compliance.module';
+import { SplitsModule } from './splits/splits.module';
 
 @Module({
   imports: [
@@ -205,6 +206,9 @@ import { ComplianceModule } from './compliance/compliance.module';
 
     // Wallets — Stellar keypair provisioning + balance sync.
     WalletsModule,
+
+    // Splits — split payment requests among multiple users.
+    SplitsModule,
   ],
   providers: [
     {

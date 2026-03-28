@@ -21,6 +21,8 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+    "migration:check": "ts-node scripts/check-migration-safety.ts",
+    "migration:rollback:check": "ts-node scripts/check-migration-rollback.ts",
     "seed:run": "ts-node src/database/seeds/run-seeds.ts",
     "generate:openapi": "ts-node scripts/generate-openapi.ts",
     "generate:client": "ts-node scripts/generate-client.ts"

@@ -45,6 +45,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 import { KycModule } from './kyc/kyc.module';
 import { ReportsModule } from './reports/reports.module';
 import { ApiVersionModule } from './api-version/api-version.module';
+import { OffRampModule } from './offramp/offramp.module';
 import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers.interceptor';
 
 @Module({
@@ -159,6 +160,9 @@ import { DeprecationHeadersInterceptor } from './api-version/deprecation-headers
 
     // Reports — async CSV data exports via BullMQ + R2.
     ReportsModule,
+
+    // Off-Ramp — USDC to NGN conversion and bank transfer.
+    OffRampModule,
   ],
   providers: [
     {

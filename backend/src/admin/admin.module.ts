@@ -16,9 +16,9 @@ import { CronModule } from '../cron/cron.module';
 import { CronAdminController } from './cron-admin.controller';
 import { AuditModule } from '../audit/audit.module';
 import { ReferralsModule } from '../referrals/referrals.module';
-
-import { AnalyticsModule } from './analytics/analytics.module';
 import { ReceiptModule } from '../receipt/receipt.module';
+import { OffRampModule } from '../offramp/offramp.module';
+import { GeoModule } from '../geo/geo.module';
 
 @Module({
   imports: [
@@ -38,6 +38,8 @@ import { ReceiptModule } from '../receipt/receipt.module';
     CronModule,
     ReceiptModule,
     ReferralsModule,
+    OffRampModule,
+    GeoModule,
   ],
   providers: [AdminService],
   controllers: [AdminController, CronAdminController],

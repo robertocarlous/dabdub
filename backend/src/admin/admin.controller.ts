@@ -25,6 +25,9 @@ import { Request } from 'express';
 import { AuditInterceptor, Audit } from '../audit/audit.interceptor';
 import { ReferralAnalyticsService } from '../referrals/referral-analytics.service';
 import { FunnelStatsDto, TopReferrersDto, CohortComparisonDto, RewardSpendDto, UserReferralStatsDto } from '../referrals/dto/referral-analytics.dto';
+import { OffRampService } from '../offramp/offramp.service';
+import { AdminOffRampQueryDto, OffRampResponseDto } from '../offramp/dto/offramp.dto';
+import { GeoService } from '../geo/geo.service';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -36,6 +39,8 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly receiptService: ReceiptService,
     private readonly referralAnalyticsService: ReferralAnalyticsService,
+    private readonly offRampService: OffRampService,
+    private readonly geoService: GeoService,
   ) {}
 
   @Get('users')
@@ -119,5 +124,36 @@ export class AdminController {
   @ApiOperation({ summary: 'Generate receipt for any transaction (admin)' })
   async getTransactionReceipt(@Param('id') id: string) {
     return this.receiptService.generateTransactionReceiptAdmin(id);
+  }
+
+  // ── Off-Ramp Admin ──────────────────────────────────────────────────────────
+
+  @Get('offramps')
+  @Roles(AdminRole.ADMIN, AdminRole.SUPERADMIN)
+  @ApiOperation({ summary: 'List all off-ramp orders with optional filters' })
+  async listOffRamps(@Query() query: AdminOffRampQueryDto) {
+    return this.offRampService.adminList(query);
+  }
+
+  @Get('offramps/:id')
+  @Roles(AdminRole.ADMIN, AdminRole.SUPERADMIN)
+  @ApiOperation({ summary: 'Get a single off-ramp order by ID' })
+  async getOffRamp(@Param('id') id: string): Promise<OffRampResponseDto> {
+    return this.offRampService.adminGetById(id);
+  }
+
+  @Post('offramps/:id/refund')
+  @Roles(AdminRole.SUPERADMIN)
+  @Audit({ action: 'offramp.refund', resourceType: 'off_ramp', resourceIdParam: 'id' })
+  @ApiOperation({ summary: 'Manually trigger USDC refund for a failed off-ramp order' })
+  async refundOffRamp(@Param('id') id: string): Promise<OffRampResponseDto> {
+    return this.offRampService.adminRefund(id);
+  @Get('geo/stats')
+  @Roles(AdminRole.ADMIN, AdminRole.SUPERADMIN)
+  @ApiOperation({
+    summary: 'Geo-blocked request counts by country in the last 24 hours',
+  })
+  async getGeoStats() {
+    return this.geoService.getBlockedCountryStatsLast24h();
   }
 }

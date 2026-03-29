@@ -41,8 +41,11 @@ export class OffRamp extends BaseEntity {
   @Column({ name: 'ngn_amount', type: 'numeric', precision: 24, scale: 2 })
   ngnAmount!: string;
 
-  @Column({ name: 'bank_account_id' })
-  bankAccountId!: string;
+  @Column({ name: 'bank_account_id', nullable: true })
+  bankAccountId!: string | null;
+
+  @Column({ name: 'bulk_disbursement_id', nullable: true })
+  bulkDisbursementId!: string | null;
 
   @Column({ name: 'bank_account_number', length: 20 })
   bankAccountNumber!: string;

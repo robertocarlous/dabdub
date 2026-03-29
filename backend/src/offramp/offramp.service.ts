@@ -1,14 +1,21 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, FindManyOptions, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bullmq';
 import { OffRamp, OffRampProvider, OffRampStatus } from './entities/off-ramp.entity';
+import { BulkDisbursement, BulkDisbursementStatus } from './entities/bulk-disbursement.entity';
 import { BankAccount } from '../bank-accounts/entities/bank-account.entity';
 import { User } from '../users/entities/user.entity';
 import { TierConfig } from '../tier-config/entities/tier-config.entity';
@@ -17,12 +24,15 @@ import { Transaction, TransactionStatus, TransactionType } from '../transactions
 import { RatesService } from '../rates/rates.service';
 import { SorobanService } from '../soroban/soroban.service';
 import { PinService } from '../pin/pin.service';
+import { FlutterwaveService } from '../flutterwave/flutterwave.service';
 import {
+  AdminOffRampQueryDto,
   ExecuteOffRampDto,
   OffRampPreviewResponseDto,
   OffRampResponseDto,
   PreviewOffRampDto,
 } from './dto/offramp.dto';
+import { BulkDisbursementResponseDto } from './dto/bulk-disbursement.dto';
 
 export const MIN_OFFRAMP_USDC = 1;
 export const SPREAD_PERCENT = 1.5; // 1.5% spread
@@ -45,11 +55,53 @@ export class OffRampService {
     private readonly feeConfigRepo: Repository<FeeConfig>,
     @InjectRepository(Transaction)
     private readonly transactionRepo: Repository<Transaction>,
+    @InjectRepository(BulkDisbursement)
+    private readonly bulkDisbursementRepo: Repository<BulkDisbursement>,
+    @InjectQueue('offramp-jobs')
+    private readonly offrampQueue: Queue,
     private readonly ratesService: RatesService,
     private readonly sorobanService: SorobanService,
     private readonly pinService: PinService,
+    private readonly flutterwaveService: FlutterwaveService,
     private readonly configService: ConfigService,
   ) {}
+
+  // ── Bulk Disbursement ───────────────────────────────────────────────────────
+
+  async uploadBulkDisbursement(userId: string, file: Express.Multer.File): Promise<BulkDisbursementResponseDto> {
+    if (!file) throw new BadRequestException('CSV file is required');
+
+    const reference = `BULK-${randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase()}`;
+
+    const bulkDisbursement = this.bulkDisbursementRepo.create({
+      userId,
+      fileName: file.originalname,
+      reference,
+      status: BulkDisbursementStatus.PENDING,
+      totalItems: 0,
+    });
+    const saved = await this.bulkDisbursementRepo.save(bulkDisbursement);
+
+    // Write buffer to a temp file so the processor can read it
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, `${saved.id}.csv`);
+    await fs.promises.writeFile(tempFilePath, file.buffer);
+
+    // Queue the job
+    await this.offrampQueue.add('bulk-disbursement', {
+      bulkDisbursementId: saved.id,
+      filePath: tempFilePath,
+      userId,
+    });
+
+    return BulkDisbursementResponseDto.from(saved);
+  }
+
+  async getBulkDisbursementStatus(userId: string, id: string): Promise<BulkDisbursementResponseDto> {
+    const bulkDisbursement = await this.bulkDisbursementRepo.findOne({ where: { id, userId } });
+    if (!bulkDisbursement) throw new NotFoundException('Bulk disbursement not found');
+    return BulkDisbursementResponseDto.from(bulkDisbursement);
+  }
 
   // ── Preview ─────────────────────────────────────────────────────────────────
 
@@ -156,25 +208,41 @@ export class OffRampService {
       throw new BadRequestException(`Failed to deduct USDC: ${err.message}`);
     }
 
-    // 9. Initiate NGN transfer via Paystack
+    // 10. Initiate NGN transfer — try Paystack first, fall back to Flutterwave
+    let usedProvider = OffRampProvider.PAYSTACK;
+    let providerRef: string;
     try {
-      const providerRef = await this.initiateNgnTransfer(
+      providerRef = await this.initiateNgnTransferPaystack(
         bankAccount,
         parseFloat(ngnAmount),
         reference,
       );
-      await this.offRampRepo.update(saved.id, {
-        status: OffRampStatus.TRANSFER_INITIATED,
-        providerReference: providerRef,
-      });
-    } catch (err: any) {
-      // Paystack failed — refund USDC
-      this.logger.error(`NGN transfer failed for ${reference}: ${err.message}`);
-      await this.refundUsdc(user.username, dto.amountUsdc.toFixed(8), saved.id, err.message);
-      throw new BadRequestException(`NGN transfer failed: ${err.message}`);
+    } catch (paystackErr: any) {
+      this.logger.warn(
+        `Paystack transfer failed for ${reference} (${paystackErr.message}), attempting Flutterwave fallback`,
+      );
+      try {
+        providerRef = await this.initiateNgnTransferFlutterwave(
+          bankAccount,
+          parseFloat(ngnAmount),
+          reference,
+        );
+        usedProvider = OffRampProvider.FLUTTERWAVE;
+      } catch (flwErr: any) {
+        // Both providers failed — refund USDC
+        this.logger.error(`Both providers failed for ${reference}: ${flwErr.message}`);
+        await this.refundUsdc(user.username, dto.amountUsdc.toFixed(8), saved.id, flwErr.message);
+        throw new BadRequestException(`NGN transfer failed: ${flwErr.message}`);
+      }
     }
 
-    // 10. Create Transaction record
+    await this.offRampRepo.update(saved.id, {
+      status: OffRampStatus.TRANSFER_INITIATED,
+      providerReference: providerRef,
+      provider: usedProvider,
+    });
+
+    // 11. Create Transaction record
     const tx = this.transactionRepo.create({
       userId,
       type: TransactionType.WITHDRAWAL,
@@ -195,6 +263,106 @@ export class OffRampService {
     return OffRampResponseDto.from(result!);
   }
 
+  // ── Execute Bulk Item ───────────────────────────────────────────────────────
+
+  async executeBulkItem(userId: string, item: { amountUsdc: number; bankCode: string; accountNumber: string; accountName: string; bulkDisbursementId: string }): Promise<void> {
+    if (item.amountUsdc < MIN_OFFRAMP_USDC) {
+      throw new BadRequestException(`Minimum off-ramp amount is $${MIN_OFFRAMP_USDC} USDC`);
+    }
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.checkSpendLimits(user, item.amountUsdc);
+
+    const [rateData, feeConfig] = await Promise.all([
+      this.ratesService.getRate('USDC', 'NGN'),
+      this.feeConfigRepo.findOne({ where: { feeType: FeeType.WITHDRAWAL, isActive: true } }),
+    ]);
+
+    const rate = parseFloat(rateData.rate);
+    const { feeUsdc, netAmountUsdc } = this.computeFee(item.amountUsdc, feeConfig);
+    const ngnAmount = (netAmountUsdc * rate * (1 - SPREAD_PERCENT / 100)).toFixed(2);
+
+    const reference = `OFFRAMP-${randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase()}`;
+
+    // Pass account properties as a pseudo-entity to offramp
+    const dummyBankAccount = {
+      bankCode: item.bankCode,
+      accountNumber: item.accountNumber,
+      bankName: 'External Bank', // Real resolution depends on Provider API checks later
+      accountName: item.accountName,
+    } as any;
+    
+    const offRamp = this.offRampRepo.create({
+      userId,
+      amountUsdc: item.amountUsdc.toFixed(8),
+      feeUsdc: feeUsdc.toFixed(8),
+      netAmountUsdc: netAmountUsdc.toFixed(8),
+      rate: rateData.rate,
+      spreadPercent: SPREAD_PERCENT.toFixed(2),
+      ngnAmount,
+      bankAccountId: null, // Nullable
+      bulkDisbursementId: item.bulkDisbursementId,
+      bankAccountNumber: dummyBankAccount.accountNumber,
+      bankName: dummyBankAccount.bankName,
+      accountName: dummyBankAccount.accountName,
+      reference,
+      status: OffRampStatus.PENDING,
+    });
+    const saved = await this.offRampRepo.save(offRamp);
+
+    try {
+      await this.sorobanService.withdraw(user.username, item.amountUsdc.toFixed(8));
+      await this.offRampRepo.update(saved.id, { status: OffRampStatus.USDC_DEDUCTED });
+    } catch (err: any) {
+      await this.offRampRepo.update(saved.id, {
+        status: OffRampStatus.FAILED,
+        failureReason: `USDC deduction failed: ${err.message}`,
+      });
+      throw new BadRequestException(`Failed to deduct USDC: ${err.message}`);
+    }
+
+    let usedProvider = OffRampProvider.PAYSTACK;
+    let providerRef: string;
+
+    try {
+      providerRef = await this.initiateNgnTransferPaystack(dummyBankAccount, parseFloat(ngnAmount), reference);
+    } catch (paystackErr: any) {
+      this.logger.warn(`Paystack transfer failed for ${reference} (${paystackErr.message}), attempting Flutterwave fallback`);
+      try {
+        providerRef = await this.initiateNgnTransferFlutterwave(dummyBankAccount, parseFloat(ngnAmount), reference);
+        usedProvider = OffRampProvider.FLUTTERWAVE;
+      } catch (flwErr: any) {
+        this.logger.error(`Both providers failed for ${reference}: ${flwErr.message}`);
+        await this.refundUsdc(user.username, item.amountUsdc.toFixed(8), saved.id, flwErr.message);
+        throw new BadRequestException(`NGN transfer failed: ${flwErr.message}`);
+      }
+    }
+
+    await this.offRampRepo.update(saved.id, {
+      status: OffRampStatus.TRANSFER_INITIATED,
+      providerReference: providerRef,
+      provider: usedProvider,
+    });
+
+    const tx = this.transactionRepo.create({
+      userId,
+      type: TransactionType.WITHDRAWAL,
+      amountUsdc: item.amountUsdc.toFixed(8),
+      amount: item.amountUsdc,
+      currency: 'USDC',
+      fee: feeUsdc.toFixed(8),
+      balanceAfter: '0', 
+      status: TransactionStatus.PENDING,
+      reference,
+      description: `Bulk Off-ramp item: ${item.amountUsdc} USDC → ${ngnAmount} NGN`,
+      metadata: { offRampId: saved.id, bankAccount: item.accountNumber },
+    });
+    const savedTx = await this.transactionRepo.save(tx);
+    await this.offRampRepo.update(saved.id, { transactionId: savedTx.id });
+  }
+
   // ── Get status ──────────────────────────────────────────────────────────────
 
   async getStatus(userId: string, referenceId: string): Promise<OffRampResponseDto> {
@@ -208,11 +376,13 @@ export class OffRampService {
       offRamp.status === OffRampStatus.TRANSFER_INITIATED &&
       offRamp.providerReference
     ) {
-      const providerStatus = await this.pollProviderStatus(offRamp.providerReference);
+      const providerStatus = await this.pollProviderStatus(
+        offRamp.providerReference,
+        offRamp.provider,
+      );
       if (providerStatus === 'success') {
         await this.offRampRepo.update(offRamp.id, { status: OffRampStatus.COMPLETED });
         offRamp.status = OffRampStatus.COMPLETED;
-        // Update transaction to completed
         if (offRamp.transactionId) {
           await this.transactionRepo.update(offRamp.transactionId, {
             status: TransactionStatus.COMPLETED,
@@ -250,6 +420,163 @@ export class OffRampService {
       page,
       limit,
     };
+  }
+
+  // ── Admin methods ────────────────────────────────────────────────────────────
+
+  async adminList(
+    query: AdminOffRampQueryDto,
+  ): Promise<{ data: OffRampResponseDto[]; total: number; page: number; limit: number }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const where: FindManyOptions<OffRamp>['where'] = {};
+    if (query.status) (where as any).status = query.status;
+    if (query.userId) (where as any).userId = query.userId;
+    if (query.dateFrom && query.dateTo) {
+      (where as any).createdAt = Between(new Date(query.dateFrom), new Date(query.dateTo));
+    }
+
+    const [offRamps, total] = await this.offRampRepo.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return {
+      data: offRamps.map(OffRampResponseDto.from),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async adminGetById(id: string): Promise<OffRampResponseDto> {
+    const offRamp = await this.offRampRepo.findOne({ where: { id } });
+    if (!offRamp) throw new NotFoundException(`Off-ramp ${id} not found`);
+    return OffRampResponseDto.from(offRamp);
+  }
+
+  async adminRefund(id: string): Promise<OffRampResponseDto> {
+    const offRamp = await this.offRampRepo.findOne({ where: { id } });
+    if (!offRamp) throw new NotFoundException(`Off-ramp ${id} not found`);
+
+    const refundableStatuses = [OffRampStatus.FAILED, OffRampStatus.USDC_DEDUCTED, OffRampStatus.TRANSFER_INITIATED];
+    if (!refundableStatuses.includes(offRamp.status)) {
+      throw new ForbiddenException(
+        `Off-ramp is in status '${offRamp.status}' and cannot be refunded`,
+      );
+    }
+
+    const user = await this.userRepo.findOne({ where: { id: offRamp.userId } });
+    if (!user) throw new NotFoundException('User associated with off-ramp not found');
+
+    await this.refundUsdc(
+      user.username,
+      offRamp.amountUsdc,
+      offRamp.id,
+      'Admin-initiated manual refund',
+    );
+
+    const updated = await this.offRampRepo.findOne({ where: { id } });
+    return OffRampResponseDto.from(updated!);
+  }
+
+  // ── Reconciliation (called by processor) ────────────────────────────────────
+
+  async reconcileStaleOrders(): Promise<void> {
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+
+    const stale = await this.offRampRepo
+      .createQueryBuilder('o')
+      .where('o.status = :status', { status: OffRampStatus.TRANSFER_INITIATED })
+      .andWhere('o.updatedAt < :cutoff', { cutoff })
+      .andWhere('o.providerReference IS NOT NULL')
+      .getMany();
+
+    this.logger.log(`Reconciling ${stale.length} stale off-ramp order(s)`);
+
+    for (const order of stale) {
+      try {
+        const providerStatus = await this.pollProviderStatus(
+          order.providerReference!,
+          order.provider,
+        );
+
+        if (providerStatus === 'success') {
+          await this.offRampRepo.update(order.id, { status: OffRampStatus.COMPLETED });
+          if (order.transactionId) {
+            await this.transactionRepo.update(order.transactionId, {
+              status: TransactionStatus.COMPLETED,
+            });
+          }
+          this.logger.log(`Reconciled ${order.reference} → completed`);
+        } else if (providerStatus === 'failed') {
+          const user = await this.userRepo.findOne({ where: { id: order.userId } });
+          if (user) {
+            await this.refundUsdc(user.username, order.amountUsdc, order.id, 'Reconciliation: provider reported failed');
+          }
+          this.logger.warn(`Reconciled ${order.reference} → failed, triggered refund`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Reconciliation error for ${order.reference}: ${err.message}`);
+      }
+    }
+  }
+
+  // ── Webhook handlers (called by webhook controller) ──────────────────────────
+
+  async handlePaystackTransferSuccess(transferCode: string, reference: string): Promise<void> {
+    const offRamp = await this.offRampRepo.findOne({ where: { reference } });
+    if (!offRamp) {
+      this.logger.warn(`Paystack webhook: no off-ramp found for reference ${reference}`);
+      return;
+    }
+    if (offRamp.status === OffRampStatus.COMPLETED) return; // idempotent
+
+    await this.offRampRepo.update(offRamp.id, {
+      status: OffRampStatus.COMPLETED,
+      providerReference: transferCode,
+    });
+
+    if (offRamp.transactionId) {
+      await this.transactionRepo.update(offRamp.transactionId, {
+        status: TransactionStatus.COMPLETED,
+      });
+    }
+    this.logger.log(`Paystack webhook: ${reference} marked completed`);
+  }
+
+  async handlePaystackTransferFailed(transferCode: string, reference: string): Promise<void> {
+    const offRamp = await this.offRampRepo.findOne({ where: { reference } });
+    if (!offRamp) {
+      this.logger.warn(`Paystack webhook: no off-ramp found for reference ${reference}`);
+      return;
+    }
+    if ([OffRampStatus.FAILED, OffRampStatus.REFUNDED].includes(offRamp.status)) return; // idempotent
+
+    const user = await this.userRepo.findOne({ where: { id: offRamp.userId } });
+    if (user) {
+      await this.refundUsdc(
+        user.username,
+        offRamp.amountUsdc,
+        offRamp.id,
+        `Paystack webhook: transfer ${transferCode} failed`,
+      );
+    } else {
+      await this.offRampRepo.update(offRamp.id, {
+        status: OffRampStatus.FAILED,
+        failureReason: `Paystack webhook: transfer ${transferCode} failed — user not found for refund`,
+      });
+    }
+
+    if (offRamp.transactionId) {
+      await this.transactionRepo.update(offRamp.transactionId, {
+        status: TransactionStatus.FAILED,
+      });
+    }
+    this.logger.warn(`Paystack webhook: ${reference} marked failed, refund initiated`);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -302,7 +629,9 @@ export class OffRampService {
     }
   }
 
-  private async initiateNgnTransfer(
+  // ── Provider: Paystack ───────────────────────────────────────────────────────
+
+  private async initiateNgnTransferPaystack(
     bankAccount: BankAccount,
     ngnAmount: number,
     reference: string,
@@ -347,7 +676,7 @@ export class OffRampService {
         source: 'balance',
         amount: Math.round(ngnAmount * 100), // Paystack uses kobo
         recipient: recipientCode,
-        reason: `CheesePay off-ramp ${reference}`,
+        reason: `DabDub off-ramp ${reference}`,
         reference,
       }),
     });
@@ -365,31 +694,75 @@ export class OffRampService {
     return transferCode;
   }
 
-  private async pollProviderStatus(providerReference: string): Promise<string> {
-    const paystackKey = this.configService.get<string>('PAYSTACK_SECRET_KEY');
-    if (!paystackKey) return 'unknown';
+  // ── Provider: Flutterwave ────────────────────────────────────────────────────
 
+  private async initiateNgnTransferFlutterwave(
+    bankAccount: BankAccount,
+    ngnAmount: number,
+    reference: string,
+  ): Promise<string> {
+    const result = await this.flutterwaveService.initiateTransfer({
+      accountBank: bankAccount.bankCode,
+      accountNumber: bankAccount.accountNumber,
+      amount: Math.round(ngnAmount), // Flutterwave uses whole NGN
+      narration: `DabDub off-ramp ${reference}`,
+      reference,
+    });
+
+    if (!result.id) throw new Error('Flutterwave: no transfer ID returned');
+    return String(result.id);
+  }
+
+  // ── Provider: Status polling ─────────────────────────────────────────────────
+
+  async pollProviderStatus(
+    providerReference: string,
+    provider: OffRampProvider = OffRampProvider.PAYSTACK,
+  ): Promise<'success' | 'failed' | 'pending' | 'unknown'> {
     try {
-      const res = await fetch(
-        `https://api.paystack.co/transfer/${providerReference}`,
-        {
-          headers: { Authorization: `Bearer ${paystackKey}` },
-        },
-      );
-      if (!res.ok) return 'unknown';
-
-      const data = (await res.json()) as { data?: { status: string } };
-      const status = data.data?.status;
-
-      if (status === 'success') return 'success';
-      if (status === 'failed' || status === 'reversed') return 'failed';
-      return 'pending';
+      if (provider === OffRampProvider.FLUTTERWAVE) {
+        return await this.pollFlutterwaveStatus(providerReference);
+      }
+      return await this.pollPaystackStatus(providerReference);
     } catch {
       return 'unknown';
     }
   }
 
-  private async refundUsdc(
+  private async pollPaystackStatus(
+    providerReference: string,
+  ): Promise<'success' | 'failed' | 'pending' | 'unknown'> {
+    const paystackKey = this.configService.get<string>('PAYSTACK_SECRET_KEY');
+    if (!paystackKey) return 'unknown';
+
+    const res = await fetch(
+      `https://api.paystack.co/transfer/${providerReference}`,
+      {
+        headers: { Authorization: `Bearer ${paystackKey}` },
+      },
+    );
+    if (!res.ok) return 'unknown';
+
+    const data = (await res.json()) as { data?: { status: string } };
+    const status = data.data?.status;
+
+    if (status === 'success') return 'success';
+    if (status === 'failed' || status === 'reversed') return 'failed';
+    return 'pending';
+  }
+
+  private async pollFlutterwaveStatus(
+    transferId: string,
+  ): Promise<'success' | 'failed' | 'pending' | 'unknown'> {
+    const status = await this.flutterwaveService.verifyTransfer(Number(transferId));
+    if (status === 'SUCCESSFUL') return 'success';
+    if (status === 'FAILED') return 'failed';
+    return 'pending';
+  }
+
+  // ── Refund ──────────────────────────────────────────────────────────────────
+
+  async refundUsdc(
     username: string,
     amountUsdc: string,
     offRampId: string,

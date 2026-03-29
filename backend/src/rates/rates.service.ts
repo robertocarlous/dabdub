@@ -84,6 +84,16 @@ export class RatesService {
     return snapshot;
   }
 
+  async getRateHistory(): Promise<RateSnapshot[]> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return this.snapshotRepo
+      .createQueryBuilder('s')
+      .where('s.base = :base AND s.quote = :quote', { base: 'USDC', quote: 'NGN' })
+      .andWhere('s.fetchedAt >= :since', { since: sevenDaysAgo })
+      .orderBy('s.fetchedAt', 'ASC')
+      .getMany();
+  }
+
   /** Converts NGN amount to USDC using the latest stored NGN-per-USDC rate. */
   async convertNgnToUsdc(ngnAmount: number): Promise<number> {
     const snapshot = await this.snapshotRepo.findOne({

@@ -102,6 +102,9 @@ export class User extends BaseEntity {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
+  @Column({ name: 'referralCode', nullable: true, default: null })
+  referralCode!: string | null;
+
   @Column({ name: 'passkey_id', length: 255, nullable: true, default: null })
   passkeyId!: string | null;
 }

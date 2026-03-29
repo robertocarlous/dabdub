@@ -10,7 +10,7 @@ import { Queue } from 'bull';
 import { randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { GlobalConfigService } from '../config/global-config.service';
-import { UserEntity } from '../database/entities/user.entity';
+import { User } from '../users/entities/user.entity';
 import { Referral, ReferralStatus } from './entities/referral.entity';
 import { ReferralStatsDto } from './dto/referral-stats.dto';
 
@@ -25,8 +25,8 @@ export class ReferralService {
   constructor(
     @InjectRepository(Referral)
     private readonly referralRepository: Repository<Referral>,
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     @InjectQueue('referrals')
     private readonly referralQueue: Queue<ReferralRewardJobPayload>,
     private readonly configService: GlobalConfigService,
@@ -182,9 +182,8 @@ export class ReferralService {
     return this.referralRepository.save(referral);
   }
 
-  private buildUsername(user: UserEntity): string {
-    const emailPrefix =
-      user.email.split('@')[0] || `${user.firstName}${user.lastName}`;
+  private buildUsername(user: User): string {
+    const emailPrefix = user.email.split('@')[0] ?? '';
     const sanitized = emailPrefix.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     return (
       sanitized ||

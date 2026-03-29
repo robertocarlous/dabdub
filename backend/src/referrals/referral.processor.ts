@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Job } from 'bull';
 import { Repository } from 'typeorm';
 import { GlobalConfigService } from '../config/global-config.service';
-import { UserEntity } from '../database/entities/user.entity';
+import { User } from '../users/entities/user.entity';
 import { NotificationType } from '../notification/entities/notification.entity';
 import { NotificationService } from '../notification/notification.service';
 import { SorobanService } from '../stellar/soroban.service';
@@ -21,8 +21,8 @@ export class ReferralProcessor {
 
   constructor(
     private readonly referralService: ReferralService,
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly notificationService: NotificationService,
     private readonly sorobanService: SorobanService,
     private readonly configService: GlobalConfigService,

@@ -86,6 +86,7 @@ import { PayoutsModule } from './payouts/payouts.module';
 import { GeoModule } from './geo/geo.module';
 import { GeoBlockMiddleware } from './geo/geo-block.middleware';
 import { ReceiptModule } from './receipt/receipt.module';
+import { StakingModule } from './staking/staking.module';
 
 @Module({
   imports: [
@@ -199,6 +200,9 @@ import { ReceiptModule } from './receipt/receipt.module';
 
     // Earnings — yield dashboard, APY display, projections.
     EarningsModule,
+
+    // Staking — liquid USDC staking with APY yield and daily distribution.
+    StakingModule,
 
     WithdrawalsModule,
 

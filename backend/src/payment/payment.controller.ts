@@ -5,6 +5,7 @@ import {
   Param,
   Query,
   Body,
+  Headers,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -34,6 +35,7 @@ import { PaymentFiltersDto } from './dto/payment-filters.dto';
 import { CancelPaymentDto } from './dto/cancel-payment.dto';
 import { PaymentReceiptDto } from './dto/payment-receipt.dto';
 import { CommonResponseDto } from '../common/dto/common-response.dto';
+import { IdempotencyInterceptor } from './idempotency.interceptor';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -46,6 +48,7 @@ export class PaymentController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(IdempotencyInterceptor)
   @ApiOperation({ summary: 'Create a new payment request' })
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -56,13 +59,10 @@ export class PaymentController {
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid input data',
   })
-  @ApiResponse({
-    status: HttpStatus.CONFLICT,
-    description: 'Payment with this idempotency key already exists',
-  })
   @ApiBody({ type: CreatePaymentDto })
   async createPayment(
     @Body() createPaymentDto: CreatePaymentDto,
+    @Headers('idempotency-key') _idempotencyKey?: string,
   ): Promise<CommonResponseDto<PaymentDetailsDto>> {
     const payment = await this.paymentService.createPayment(createPaymentDto);
     return {

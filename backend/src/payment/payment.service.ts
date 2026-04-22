@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -27,17 +26,6 @@ export class PaymentService {
   async createPayment(
     createPaymentDto: CreatePaymentDto,
   ): Promise<PaymentDetailsDto> {
-    // Check for duplicate idempotency key
-    const existing = await this.paymentRepository.findOne({
-      where: { reference: createPaymentDto.idempotencyKey },
-    });
-
-    if (existing) {
-      throw new ConflictException(
-        'Payment with this idempotency key already exists',
-      );
-    }
-
     const payment = this.paymentRepository.create({
       amount: createPaymentDto.amount,
       currency: createPaymentDto.currency,

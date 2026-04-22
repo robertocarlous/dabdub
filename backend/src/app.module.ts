@@ -4,6 +4,7 @@ import { ConfigType } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AppConfigModule, appConfig, redisConfig } from './config';
+import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
@@ -44,6 +45,7 @@ import { WsModule } from './ws/ws.module';
     }),
 
     HealthModule,
+    MerchantAnalyticsModule,
 
     // 5. Auth — register/login/refresh/logout + global JWT guard.
     AuthModule,
@@ -60,4 +62,3 @@ import { WsModule } from './ws/ws.module';
   ],
 })
 export class AppModule {}
-

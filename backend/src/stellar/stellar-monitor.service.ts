@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AdminAlertService } from '../alerts/admin-alert.service';
+import { AdminAlertType } from '../alerts/admin-alert.entity';
 import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import { StellarService } from './stellar.service';
 import { SettlementsService } from '../settlements/settlements.service';
@@ -15,6 +17,7 @@ export class StellarMonitorService {
   constructor(
     @InjectRepository(Payment)
     private paymentsRepo: Repository<Payment>,
+    private adminAlerts: AdminAlertService,
     private stellar: StellarService,
     private settlements: SettlementsService,
     private webhooks: WebhooksService,
@@ -39,6 +42,13 @@ export class StellarMonitorService {
       transactions = await this.stellar.getAccountTransactions(depositAddress, cursor);
     } catch (err) {
       this.logger.error('Failed to fetch Stellar transactions', err.message);
+      await this.adminAlerts.raise({
+        type: AdminAlertType.STELLAR_MONITOR,
+        dedupeKey: 'stellar-monitor.fetch',
+        message: `Failed to fetch Stellar transactions: ${err.message}`,
+        metadata: { depositAddress },
+        thresholdValue: 1,
+      });
       return;
     }
 
@@ -54,7 +64,17 @@ export class StellarMonitorService {
       const result = await this.stellar.verifyPayment(tx.hash, paymentMemo);
       if (!result.verified) continue;
 
-      await this.confirmPayment(matched, tx.hash, result.amount, result.asset);
+      try {
+        await this.confirmPayment(matched, tx.hash, result.amount, result.asset);
+      } catch (err) {
+        await this.adminAlerts.raise({
+          type: AdminAlertType.STELLAR_MONITOR,
+          dedupeKey: `stellar-monitor.confirm:${matched.id}`,
+          message: `Failed to confirm payment ${matched.reference}: ${err.message}`,
+          metadata: { txHash: tx.hash, paymentId: matched.id },
+          thresholdValue: 1,
+        });
+      }
     }
 
     await this.expireOldPayments();

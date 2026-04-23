@@ -1,13 +1,14 @@
-import { Controller, Get, Post, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, Request, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsArray, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { WebhooksService } from './webhooks.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 class CreateWebhookDto {
-  @IsString() url: string;
+  @IsString() @Transform(({ value }) => value?.trim()) url: string;
   @IsArray() events: string[];
-  @IsOptional() @IsString() secret?: string;
+  @IsOptional() @IsString() @Transform(({ value }) => value?.trim()) secret?: string;
 }
 
 @ApiTags('webhooks')
@@ -31,7 +32,7 @@ export class WebhooksController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete webhook' })
-  remove(@Request() req, @Param('id') id: string) {
+  remove(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.webhooksService.remove(id, req.user.merchantId);
   }
 }

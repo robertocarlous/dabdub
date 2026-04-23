@@ -8,7 +8,9 @@ import {
   WebhookQueueProcessor,
 } from './queue.processors';
 import { QueueAdminController } from './queue-admin.controller';
+import { QueueMetricsService } from './queue-metrics.service';
 import { StellarModule } from '../stellar/stellar.module';
+import { AdminAlertModule } from '../alerts/admin-alert.module';
 
 @Module({
   imports: [
@@ -19,6 +21,7 @@ import { StellarModule } from '../stellar/stellar.module';
       })),
     ),
     forwardRef(() => StellarModule),
+    AdminAlertModule,
   ],
   controllers: [QueueAdminController],
   providers: [
@@ -26,6 +29,7 @@ import { StellarModule } from '../stellar/stellar.module';
     WebhookQueueProcessor,
     NotificationQueueProcessor,
     StellarMonitorQueueProcessor,
+    QueueMetricsService,
   ],
   exports: [BullModule],
 })

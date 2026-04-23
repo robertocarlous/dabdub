@@ -12,6 +12,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam } from '@nestjs/swagger'
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { QUEUE_LIST, QUEUE_NAMES } from './queue.constants';
+import { QueueMetricsService, QueueMetric } from './queue-metrics.service';
 
 const DLQ_ALERT_THRESHOLD = 10;
 
@@ -27,7 +28,14 @@ export class QueueAdminController {
     @InjectQueue(QUEUE_NAMES.webhook) private webhookQ: Queue,
     @InjectQueue(QUEUE_NAMES.notification) private notificationQ: Queue,
     @InjectQueue(QUEUE_NAMES.stellarMonitor) private stellarMonitorQ: Queue,
+    private readonly metricsService: QueueMetricsService,
   ) {}
+
+  @Get('metrics')
+  @ApiOperation({ summary: 'Get queue depth and throughput metrics for all queues' })
+  async getMetrics(): Promise<QueueMetric[]> {
+    return this.metricsService.getMetrics();
+  }
 
   private resolveQueue(name: string): Queue {
     const map: Record<string, Queue> = {

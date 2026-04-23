@@ -15,6 +15,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CronModule } from '../cron/cron.module';
 import { CronAdminController } from './cron-admin.controller';
 import { AuditModule } from '../audit/audit.module';
+import { FeeConfig } from '../fee-config/entities/fee-config.entity';
+import { FeeHistory } from '../fee-config/entities/fee-history.entity';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { AuditModule } from '../audit/audit.module';
       FraudFlag,
       Session,
       RefreshToken,
+      FeeConfig,
+      FeeHistory,
     ]),
     EmailModule,
     NotificationsModule,

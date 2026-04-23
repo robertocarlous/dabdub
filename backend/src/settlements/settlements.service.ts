@@ -3,9 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { AdminAlertService } from '../alerts/admin-alert.service';
+import { AdminAlertType } from '../alerts/admin-alert.entity';
 import { Settlement, SettlementStatus } from './entities/settlement.entity';
 import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { PaginatedResponseDto } from '../common/dto/pagination.dto';
 
 export interface PartnerCallbackPayload {
   reference: string;
@@ -24,6 +27,7 @@ export class SettlementsService {
     private paymentsRepo: Repository<Payment>,
     private config: ConfigService,
     private webhooks: WebhooksService,
+    private adminAlerts: AdminAlertService,
   ) {}
 
   async initiateSettlement(payment: Payment): Promise<void> {
@@ -86,6 +90,16 @@ export class SettlementsService {
       });
     } catch (err) {
       this.logger.error(`Settlement failed for ${settlement.id}`, err.message);
+      await this.adminAlerts.raise({
+        type: AdminAlertType.SETTLEMENT_FAILURE,
+        dedupeKey: `settlement:${settlement.id}`,
+        message: `Settlement failed for ${settlement.id}: ${err.message}`,
+        metadata: {
+          merchantId: settlement.merchantId,
+          paymentId: payment.id,
+        },
+        thresholdValue: 1,
+      });
 
       settlement.status = SettlementStatus.FAILED;
       settlement.failureReason = err.message;
@@ -102,14 +116,14 @@ export class SettlementsService {
   }
 
   async findAll(merchantId: string, page = 1, limit = 20) {
-    const [settlements, total] = await this.settlementsRepo.findAndCount({
+    const [data, total] = await this.settlementsRepo.findAndCount({
       where: { merchantId },
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });
 
-    return { settlements, total, page, limit };
+    return PaginatedResponseDto.of(data, total, page, limit);
   }
 
   async handlePartnerCallback(payload: PartnerCallbackPayload): Promise<void> {

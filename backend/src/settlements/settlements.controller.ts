@@ -1,11 +1,20 @@
 import { Controller, Get, Post, Query, UseGuards, Request, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiOkResponse,
+  ApiUnauthorizedResponse,
+  ApiResponse,
+  ApiHeader,
+} from '@nestjs/swagger';
 import { SettlementsService, PartnerCallbackPayload } from './settlements.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { PartnerSignatureGuard } from './guards/partner-signature.guard';
 
 @ApiTags('settlements')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @UseGuards(JwtAuthGuard)
 @Controller('settlements')
 export class SettlementsController {
@@ -13,8 +22,11 @@ export class SettlementsController {
 
   @Get()
   @ApiOperation({ summary: 'List settlements' })
-  findAll(@Request() req, @Query('page') page = 1, @Query('limit') limit = 20) {
-    return this.settlementsService.findAll(req.user.merchantId, +page, +limit);
+  @ApiOkResponse({ description: 'Paginated settlements' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  findAll(@Request() req: { user: { merchantId: string } }, @Query() pagination: PaginationDto) {
+    return this.settlementsService.findAll(req.user.merchantId, pagination.page, pagination.limit);
   }
 }
 

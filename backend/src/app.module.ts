@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin/admin.module';
 import { AdminAlertModule } from './alerts/admin-alert.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
@@ -57,6 +58,7 @@ import { AppThrottlerGuard } from './auth/guards/throttler.guard';
       inject: [ConfigService],
     }),
     HealthModule,
+    AdminModule,
     MerchantAnalyticsModule,
     AdminAlertModule,
     AuthModule,

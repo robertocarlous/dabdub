@@ -1,16 +1,10 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { IsEmail, IsOptional, IsString } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { WaitlistEntry } from './entities/waitlist.entity';
+import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 
-export class JoinWaitlistDto {
-  @IsEmail() @Transform(({ value }) => value?.trim()) email: string;
-  @IsOptional() @IsString() @Transform(({ value }) => value?.trim()) username?: string;
-  @IsOptional() @IsString() @Transform(({ value }) => value?.trim()) businessName?: string;
-  @IsOptional() @IsString() @Transform(({ value }) => value?.trim()) country?: string;
-}
+export { JoinWaitlistDto } from './dto/join-waitlist.dto';
 
 @Injectable()
 export class WaitlistService {

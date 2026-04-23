@@ -1,13 +1,17 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { readTelemetryConfig, shutdownTelemetry, startTelemetry } from './telemetry/telemetry';
 
-async function bootstrap() {
+async function bootstrap(): Promise<void> {
+  startTelemetry(readTelemetryConfig());
   const app = await NestFactory.create(AppModule);
+  const port = process.env.PORT ?? 3000;
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors();
 
   const config = new DocumentBuilder()
@@ -21,8 +25,14 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
-  console.log(`CheesePay API running on port ${process.env.PORT ?? 3000}`);
+  process.once('SIGTERM', () => {
+    void shutdownTelemetry();
+  });
+  process.once('SIGINT', () => {
+    void shutdownTelemetry();
+  });
+
+  await app.listen(port);
 }
 
-bootstrap();
+void bootstrap();

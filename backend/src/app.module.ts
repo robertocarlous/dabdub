@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AdminAlertModule } from './alerts/admin-alert.module';
 import { AuthModule } from './auth/auth.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -9,6 +10,8 @@ import { StellarModule } from './stellar/stellar.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { HealthModule } from './health/health.module';
+import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { WaitlistModule } from './waitlist/waitlist.module';
       }),
       inject: [ConfigService],
     }),
+    HealthModule,
+    MerchantAnalyticsModule,
+    AdminAlertModule,
     AuthModule,
     MerchantsModule,
     PaymentsModule,

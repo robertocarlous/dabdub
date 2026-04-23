@@ -1,17 +1,17 @@
-import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { readTelemetryConfig, shutdownTelemetry, startTelemetry } from './telemetry/telemetry';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('Bootstrap');
   startTelemetry(readTelemetryConfig());
   const app = await NestFactory.create(AppModule);
   const port = process.env.PORT ?? 3000;
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors();
 
   const config = new DocumentBuilder()
@@ -33,7 +33,6 @@ async function bootstrap(): Promise<void> {
   });
 
   await app.listen(port);
-  logger.log(`CheesePay API running on port ${port}`);
 }
 
 void bootstrap();

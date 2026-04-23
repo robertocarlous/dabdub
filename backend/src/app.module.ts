@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
 import { AdminAlertModule } from './alerts/admin-alert.module';
+import { AmlModule } from './aml/aml.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
@@ -18,14 +19,8 @@ import { QueueModule } from './queues/queue.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { StellarModule } from './stellar/stellar.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
-<<<<<<< Analytics
-import { HealthModule } from './health/health.module';
-import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
-import { WebhooksModule } from './webhooks/webhooks.module'
-=======
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { AppThrottlerGuard } from './auth/guards/throttler.guard';
->>>>>>> main
 
 @Module({
   imports: [
@@ -65,6 +60,7 @@ import { AppThrottlerGuard } from './auth/guards/throttler.guard';
     }),
     HealthModule,
     AdminModule,
+    AmlModule,
     MerchantAnalyticsModule,
     AdminAlertModule,
     AuthModule,

@@ -48,6 +48,9 @@ export class Merchant {
   @Column({ type: 'enum', enum: MerchantStatus, default: MerchantStatus.PENDING })
   status: MerchantStatus;
 
+  @Column({ default: false })
+  isAdmin: boolean;
+
   @Column({ nullable: true })
   apiKey: string;
 

@@ -31,7 +31,7 @@ export class AuthService {
     });
 
     const saved = await this.merchantsRepo.save(merchant);
-    const token = this.signToken(saved.id, saved.email);
+    const token = this.signToken(saved.id, saved.email, saved.isAdmin);
 
     return { accessToken: token, merchant: this.sanitize(saved) };
   }
@@ -43,12 +43,12 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, merchant.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    const token = this.signToken(merchant.id, merchant.email);
+    const token = this.signToken(merchant.id, merchant.email, merchant.isAdmin);
     return { accessToken: token, merchant: this.sanitize(merchant) };
   }
 
-  private signToken(sub: string, email: string): string {
-    return this.jwtService.sign({ sub, email });
+  private signToken(sub: string, email: string, isAdmin: boolean): string {
+    return this.jwtService.sign({ sub, email, isAdmin });
   }
 
   private sanitize(merchant: Merchant) {

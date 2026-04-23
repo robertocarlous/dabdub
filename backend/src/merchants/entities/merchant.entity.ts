@@ -17,6 +17,11 @@ export enum MerchantStatus {
   PENDING = 'pending',
 }
 
+export enum MerchantRole {
+  ADMIN = 'admin',
+  MERCHANT = 'merchant',
+}
+
 @Entity('merchants')
 export class Merchant {
   @PrimaryGeneratedColumn('uuid')
@@ -51,8 +56,8 @@ export class Merchant {
   @Column({ type: 'enum', enum: MerchantStatus, default: MerchantStatus.PENDING })
   status: MerchantStatus;
 
-  @Column({ default: false })
-  isAdmin: boolean;
+  @Column({ type: 'enum', enum: MerchantRole, default: MerchantRole.MERCHANT })
+  role: MerchantRole;
 
   @Column({ nullable: true })
   apiKey: string;

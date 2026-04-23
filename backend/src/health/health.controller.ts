@@ -268,7 +268,7 @@ export class HealthController {
       };
     }
   }
-}
+
   @Get('ready')
   @HealthCheck()
   @ApiOperation({ summary: 'Readiness — checks DB and Stellar' })

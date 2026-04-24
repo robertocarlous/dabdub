@@ -22,6 +22,7 @@ import { WaitlistModule } from './waitlist/waitlist.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { AppThrottlerGuard } from './auth/guards/throttler.guard';
 import { EmailModule } from './email/email.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { EmailModule } from './email/email.module';
     WebhooksModule,
     WaitlistModule,
     QueueModule,
+    AuditModule,
   ],
   providers: [
     {

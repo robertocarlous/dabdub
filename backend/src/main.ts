@@ -1,4 +1,5 @@
 import { NestFactory, Reflector, HttpAdapterHost } from '@nestjs/core';
+import helmet from 'helmet';
 import { ClassSerializerInterceptor, ValidationPipe, RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -12,6 +13,27 @@ const { version } = require('../package.json') as { version: string };
 async function bootstrap(): Promise<void> {
   startTelemetry(readTelemetryConfig());
   const app = await NestFactory.create(AppModule, { rawBody: true });
+
+  app.use(
+    helmet({
+      hsts: true,
+      frameguard: true,
+      noSniff: true,
+      xssFilter: true,
+      hidePoweredBy: true,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'validator.swagger.io'],
+        },
+      },
+    }),
+  );
+
+  // explicitly disable x-powered-by for Express
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
 
   const config = app.get(ConfigService);
   const port = parseInt(String(config.get('PORT', 3000)), 10);

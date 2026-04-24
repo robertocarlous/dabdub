@@ -13,14 +13,20 @@ export class AnalyticsController {
   @Get('volume')
   @ApiOperation({ summary: 'Get payment volume aggregation' })
   @ApiQuery({ name: 'period', enum: ['daily', 'monthly'], required: false })
-  async getVolume(@Request() req, @Query('period') period: 'daily' | 'monthly' = 'daily') {
-    return this.analyticsService.getVolume(req.user.merchantId, period);
+  @ApiQuery({ name: 'compareWith', enum: ['previous'], required: false })
+  async getVolume(
+    @Request() req,
+    @Query('period') period: 'daily' | 'monthly' = 'daily',
+    @Query('compareWith') compareWith?: 'previous',
+  ) {
+    return this.analyticsService.getVolume(req.user.merchantId, period, compareWith);
   }
 
   @Get('funnel')
   @ApiOperation({ summary: 'Get payment funnel metrics' })
-  async getFunnel(@Request() req) {
-    return this.analyticsService.getFunnel(req.user.merchantId);
+  @ApiQuery({ name: 'compareWith', enum: ['previous'], required: false })
+  async getFunnel(@Request() req, @Query('compareWith') compareWith?: 'previous') {
+    return this.analyticsService.getFunnel(req.user.merchantId, compareWith);
   }
 
   @Get('comparison')

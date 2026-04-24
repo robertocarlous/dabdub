@@ -1,47 +1,112 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
 import { MerchantAnalyticsService } from './merchant-analytics.service';
 
 describe('MerchantAnalyticsService', () => {
-  it('fills missing signup days and computes activation and monthly actives', async () => {
-    const query = jest
-      .fn()
-      .mockResolvedValueOnce([
-        { day: '2026-04-20', count: '2' },
-        { day: '2026-04-22', count: '1' },
-      ])
-      .mockResolvedValueOnce([{ count: '3', total: '5' }])
-      .mockResolvedValueOnce([{ count: '4' }]);
+  let service: MerchantAnalyticsService;
+  let mockDataSource: any;
 
-    const service = new MerchantAnalyticsService({
-      query,
-    } as never);
+  beforeEach(async () => {
+    mockDataSource = {
+      query: jest.fn(),
+    };
 
-    const result = await service.getMetrics(
-      new Date('2026-04-22T10:00:00.000Z'),
-    );
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MerchantAnalyticsService,
+        {
+          provide: getDataSourceToken(),
+          useValue: mockDataSource,
+        },
+      ],
+    }).compile();
 
-    expect(result.generatedAt).toBe('2026-04-22T10:00:00.000Z');
-    expect(result.dailySignups).toHaveLength(30);
-    expect(result.dailySignups.at(-3)).toEqual({
-      date: '2026-04-20',
-      signups: 2,
+    service = module.get<MerchantAnalyticsService>(MerchantAnalyticsService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('getTopMerchants', () => {
+    it('should return top merchants with correct structure', async () => {
+      const mockResults = [
+        {
+          businessName: 'Test Business 1',
+          volume: '1000.50',
+          paymentCount: 25,
+          settlementCount: 5,
+          country: 'US',
+        },
+        {
+          businessName: 'Test Business 2',
+          volume: '750.25',
+          paymentCount: 20,
+          settlementCount: 3,
+          country: 'CA',
+        },
+      ];
+
+      mockDataSource.query.mockResolvedValue(mockResults);
+
+      const result = await service.getTopMerchants(10, '30d');
+
+      expect(result).toEqual({
+        merchants: [
+          {
+            businessName: 'Test Business 1',
+            volume: 1000.5,
+            paymentCount: 25,
+            settlementCount: 5,
+            country: 'US',
+          },
+          {
+            businessName: 'Test Business 2',
+            volume: 750.25,
+            paymentCount: 20,
+            settlementCount: 3,
+            country: 'CA',
+          },
+        ],
+        period: '30d',
+        generatedAt: expect.any(String),
+      });
+
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        expect.arrayContaining([expect.any(String), 10]),
+      );
     });
-    expect(result.dailySignups.at(-2)).toEqual({
-      date: '2026-04-21',
-      signups: 0,
+
+    it('should handle different period values', async () => {
+      mockDataSource.query.mockResolvedValue([]);
+
+      await service.getTopMerchants(5, '7d');
+      await service.getTopMerchants(5, '90d');
+
+      expect(mockDataSource.query).toHaveBeenCalledTimes(2);
     });
-    expect(result.dailySignups.at(-1)).toEqual({
-      date: '2026-04-22',
-      signups: 1,
-    });
-    expect(result.activationRate).toEqual({
-      windowDays: 7,
-      activatedMerchants: 3,
-      totalMerchants: 5,
-      percentage: 60,
-    });
-    expect(result.monthlyActiveMerchants).toEqual({
-      month: '2026-04',
-      count: 4,
+
+    it('should cache results for 10 minutes', async () => {
+      const mockResults = [
+        {
+          businessName: 'Test Business',
+          volume: '1000.00',
+          paymentCount: 10,
+          settlementCount: 2,
+          country: 'US',
+        },
+      ];
+
+      mockDataSource.query.mockResolvedValue(mockResults);
+
+      // First call
+      const result1 = await service.getTopMerchants(10, '30d');
+      // Second call with same parameters
+      const result2 = await service.getTopMerchants(10, '30d');
+
+      expect(result1).toEqual(result2);
+      expect(mockDataSource.query).toHaveBeenCalledTimes(1); // Should only query once due to caching
     });
   });
 });

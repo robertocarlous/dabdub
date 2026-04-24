@@ -28,6 +28,7 @@ import { SentryModule } from './sentry/sentry.module';
 import { CronModule } from './cron/cron.module';
 import { PrometheusModule } from './prometheus/prometheus.module';
 import { AuditModule } from './audit/audit.module';
+import { HttpMetricsInterceptor } from './prometheus/http-metrics.interceptor';
 
 @Module({
   imports: [
@@ -102,6 +103,10 @@ import { AuditModule } from './audit/audit.module';
     {
       provide: APP_GUARD,
       useClass: AppThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpMetricsInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

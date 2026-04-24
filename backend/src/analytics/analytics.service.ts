@@ -5,7 +5,27 @@ import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import { Settlement, SettlementStatus } from '../settlements/entities/settlement.entity';
 
 type AnalyticsPeriod = 'daily' | 'monthly';
+type VolumeScope = 'merchant' | 'admin';
 type RevenueScope = 'merchant' | 'admin';
+
+interface VolumeOptions {
+  merchantId?: string;
+  scope: VolumeScope;
+  period: AnalyticsPeriod;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+interface VolumeRange {
+  start: Date;
+  endExclusive: Date;
+}
+
+interface VolumeBreakdownRow {
+  bucket: string;
+  count: string;
+  volumeUsd: string;
+}
 
 interface RevenueOptions {
   merchantId?: string;
@@ -53,24 +73,31 @@ export class AnalyticsService {
     return { ...data, cacheHit: false };
   }
 
-  async getVolume(merchantId: string, period: AnalyticsPeriod) {
-    const cacheKey = `volume:${merchantId}:${period}`;
-    return this.getCachedData(cacheKey, async () => {
-      const dateFormat = period === 'daily' ? 'YYYY-MM-DD' : 'YYYY-MM';
-      
-      const results = await this.paymentsRepo
-        .createQueryBuilder('payment')
-        .select(`TO_CHAR(payment.createdAt, '${dateFormat}')`, 'date')
-        .addSelect('SUM(payment.amountUsd)', 'volume')
-        .addSelect('COUNT(*)', 'count')
-        .where('payment.merchantId = :merchantId', { merchantId })
-        .andWhere('payment.status = :status', { status: PaymentStatus.SETTLED })
-        .groupBy('date')
-        .orderBy('date', 'ASC')
-        .getRawMany();
+  async getVolume(options: VolumeOptions) {
+    const { merchantId, period, scope, dateFrom, dateTo } = options;
+    const range = this.resolveVolumeRange(period, dateFrom, dateTo);
+    const cacheKey = [
+      'volume',
+      scope,
+      merchantId ?? 'all',
+      period,
+      range.start.toISOString(),
+      range.endExclusive.toISOString(),
+    ].join(':');
 
-      return { results };
-    });
+    return this.getCachedValue(
+      cacheKey,
+      async () => {
+        const rows = await this.getVolumeBreakdown(
+          merchantId,
+          period,
+          range.start,
+          range.endExclusive,
+        );
+        return this.buildVolumeSeries(period, range, rows);
+      },
+      5 * 60 * 1000,
+    );
   }
 
   async getFunnel(merchantId: string) {
@@ -204,6 +231,138 @@ export class AnalyticsService {
       .getRawOne();
 
     return parseFloat(result?.total || 0);
+  }
+
+  private async getCachedValue<T>(key: string, fetchFn: () => Promise<T>, ttl = 60000): Promise<T> {
+    const cached = this.cache.get(key);
+    if (cached && cached.expiry > Date.now()) {
+      this.logger.debug(`Cache hit for ${key}`);
+      return cached.data as T;
+    }
+    this.logger.debug(`Cache miss for ${key}`);
+    const data = await fetchFn();
+    this.cache.set(key, { data, expiry: Date.now() + ttl });
+    return data;
+  }
+
+  private async getVolumeBreakdown(
+    merchantId: string | undefined,
+    period: AnalyticsPeriod,
+    start: Date,
+    end: Date,
+  ): Promise<VolumeBreakdownRow[]> {
+    const bucketExpression =
+      period === 'daily'
+        ? `DATE_TRUNC('day', payment."createdAt")`
+        : `DATE_TRUNC('month', payment."createdAt")`;
+    const labelFormat = period === 'daily' ? 'YYYY-MM-DD' : 'YYYY-MM';
+    const query = this.paymentsRepo
+      .createQueryBuilder('payment')
+      .select(`TO_CHAR(${bucketExpression}, '${labelFormat}')`, 'bucket')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('COALESCE(SUM(payment."amountUsd"), 0)::numeric(18,6)::text', 'volumeUsd')
+      .where('payment.status = :status', { status: PaymentStatus.SETTLED })
+      .andWhere('payment."createdAt" >= :start', { start })
+      .andWhere('payment."createdAt" < :end', { end });
+
+    if (merchantId) {
+      query.andWhere('payment."merchantId" = :merchantId', { merchantId });
+    }
+
+    return query
+      .groupBy(bucketExpression)
+      .orderBy(bucketExpression, 'ASC')
+      .getRawMany();
+  }
+
+  private resolveVolumeRange(
+    period: AnalyticsPeriod,
+    dateFrom?: string,
+    dateTo?: string,
+  ): VolumeRange {
+    if (period === 'daily') {
+      const endInclusive = dateTo
+        ? this.parseIsoDate(dateTo)
+        : this.startOfUtcDay(new Date());
+      const start = dateFrom
+        ? this.parseIsoDate(dateFrom)
+        : this.addUtcDays(endInclusive, -29);
+
+      if (start > endInclusive) {
+        throw new BadRequestException('"dateFrom" must be before or equal to "dateTo"');
+      }
+
+      return {
+        start,
+        endExclusive: this.addUtcDays(endInclusive, 1),
+      };
+    }
+
+    const endMonth = dateTo
+      ? this.startOfUtcMonth(this.parseIsoDate(dateTo))
+      : this.startOfUtcMonth(new Date());
+    const startMonth = dateFrom
+      ? this.startOfUtcMonth(this.parseIsoDate(dateFrom))
+      : this.addUtcMonths(endMonth, -11);
+
+    if (startMonth > endMonth) {
+      throw new BadRequestException('"dateFrom" must be before or equal to "dateTo"');
+    }
+
+    return {
+      start: startMonth,
+      endExclusive: this.addUtcMonths(endMonth, 1),
+    };
+  }
+
+  private buildVolumeSeries(
+    period: AnalyticsPeriod,
+    range: VolumeRange,
+    rows: VolumeBreakdownRow[],
+  ): Array<{ date: string; count: number; volumeUsd: number }> {
+    const values = new Map(
+      rows.map((row) => [
+        row.bucket,
+        {
+          count: parseInt(row.count, 10),
+          volumeUsd: Number(this.normalizeDecimal(row.volumeUsd)),
+        },
+      ]),
+    );
+    const series: Array<{ date: string; count: number; volumeUsd: number }> = [];
+
+    if (period === 'daily') {
+      for (
+        let cursor = new Date(range.start);
+        cursor < range.endExclusive;
+        cursor = this.addUtcDays(cursor, 1)
+      ) {
+        const label = this.formatDay(cursor);
+        const point = values.get(label);
+        series.push({
+          date: label,
+          count: point?.count ?? 0,
+          volumeUsd: point?.volumeUsd ?? 0,
+        });
+      }
+      return series;
+    }
+
+    for (
+      let cursor = new Date(range.start);
+      cursor < range.endExclusive;
+      cursor = this.addUtcMonths(cursor, 1)
+    ) {
+      const label = this.formatMonth(cursor);
+      const point = values.get(label);
+      series.push({
+        date: label,
+        count: point?.count ?? 0,
+        volumeUsd: point?.volumeUsd ?? 0,
+      });
+    }
+
+    return series;
   }
 
   private async getRevenueBreakdown(

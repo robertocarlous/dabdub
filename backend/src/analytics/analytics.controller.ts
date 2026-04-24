@@ -37,8 +37,24 @@ export class AnalyticsController {
   @Get('volume')
   @ApiOperation({ summary: 'Get payment volume aggregation' })
   @ApiQuery({ name: 'period', enum: ['daily', 'monthly'], required: false })
-  async getVolume(@Request() req, @Query('period') period: 'daily' | 'monthly' = 'daily') {
-    return this.analyticsService.getVolume(req.user.merchantId, period);
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Start date in YYYY-MM-DD format' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'End date in YYYY-MM-DD format' })
+  async getVolume(
+    @Request() req: { user: { merchantId: string; role: MerchantRole } },
+    @Query('period') period: 'daily' | 'monthly' = 'daily',
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const isAdmin =
+      req.user.role === MerchantRole.ADMIN || req.user.role === MerchantRole.SUPERADMIN;
+
+    return this.analyticsService.getVolume({
+      scope: isAdmin ? 'admin' : 'merchant',
+      merchantId: isAdmin ? undefined : req.user.merchantId,
+      period,
+      dateFrom,
+      dateTo,
+    });
   }
 
   @Get('funnel')

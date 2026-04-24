@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAlertModule } from '../alerts/admin-alert.module';
 import { SettlementsService } from './settlements.service';
 import { SettlementsController } from './settlements.controller';
+import { AdminSettlementsController } from './admin-settlements.controller';
 import { Settlement } from './entities/settlement.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { WebhooksModule } from '../webhooks/webhooks.module';
@@ -13,7 +14,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     AdminAlertModule,
     WebhooksModule,
   ],
-  controllers: [SettlementsController],
+  controllers: [SettlementsController, AdminSettlementsController],
   providers: [SettlementsService],
   exports: [SettlementsService],
 })

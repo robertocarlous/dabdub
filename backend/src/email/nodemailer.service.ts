@@ -10,6 +10,8 @@ export interface MailSendResult {
   messageId: string;
 }
 
+// Resolves to src/email/templates in dev (ts-node) and dist/email/templates after build.
+// nest-cli.json must include "assets": [{"include": "email/templates/**", "outDir": "dist"}]
 const TEMPLATES_DIR = path.join(__dirname, 'templates');
 
 const SUBJECTS: Record<string, string> = {

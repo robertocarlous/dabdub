@@ -1,22 +1,61 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin/admin.module';
 import { AdminAlertModule } from './alerts/admin-alert.module';
+import { AmlModule } from './aml/aml.module';
 import { AuthModule } from './auth/auth.module';
-import { MerchantsModule } from './merchants/merchants.module';
-import { PaymentsModule } from './payments/payments.module';
-import { StellarModule } from './stellar/stellar.module';
-import { SettlementsModule } from './settlements/settlements.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
-import { WaitlistModule } from './waitlist/waitlist.module';
 import { HealthModule } from './health/health.module';
 import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
+import { MerchantsModule } from './merchants/merchants.module';
+import { GroupsModule } from './groups/groups.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
+import { QueueModule } from './queues/queue.module';
+import { SettlementsModule } from './settlements/settlements.module';
+import { StellarModule } from './stellar/stellar.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { AppThrottlerGuard } from './auth/guards/throttler.guard';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: Number(config.get('THROTTLE_DEFAULT_TTL_MS', 60000)),
+            limit: Number(config.get('THROTTLE_DEFAULT_LIMIT', 100)),
+          },
+          {
+            name: 'authenticated',
+            ttl: Number(config.get('THROTTLE_AUTHENTICATED_TTL_MS', 60000)),
+            limit: Number(config.get('THROTTLE_AUTHENTICATED_LIMIT', 1000)),
+          },
+        ],
+      }),
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        redis: {
+          host: config.get('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+          password: config.get<string | undefined>('REDIS_PASSWORD'),
+        },
+      }),
+      inject: [ConfigService],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
@@ -33,15 +72,27 @@ import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
       inject: [ConfigService],
     }),
     HealthModule,
+    EmailModule,
+    AdminModule,
+    AmlModule,
     MerchantAnalyticsModule,
     AdminAlertModule,
     AuthModule,
     MerchantsModule,
+    GroupsModule,
+    NotificationsModule,
     PaymentsModule,
     StellarModule,
     SettlementsModule,
     WebhooksModule,
     WaitlistModule,
+    QueueModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AppThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

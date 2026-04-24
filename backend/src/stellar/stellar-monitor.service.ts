@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
+import { QUEUE_NAMES } from '../queues/queue.constants';
 import { Repository } from 'typeorm';
 import { AdminAlertService } from '../alerts/admin-alert.service';
 import { AdminAlertType } from '../alerts/admin-alert.entity';
@@ -10,7 +12,7 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 
 @Injectable()
-export class StellarMonitorService {
+export class StellarMonitorService implements OnModuleInit {
   private readonly logger = new Logger(StellarMonitorService.name);
   private cursors: Map<string, string> = new Map();
 
@@ -21,9 +23,18 @@ export class StellarMonitorService {
     private stellar: StellarService,
     private settlements: SettlementsService,
     private webhooks: WebhooksService,
+    @InjectQueue(QUEUE_NAMES.stellarMonitor) private monitorQueue: Queue,
   ) {}
 
-  @Cron(CronExpression.EVERY_30_SECONDS)
+  async onModuleInit(): Promise<void> {
+    await this.monitorQueue.add(
+      'scan',
+      {},
+      { repeat: { every: 30_000 }, jobId: 'stellar-monitor-repeat', removeOnComplete: true },
+    );
+    this.logger.log('Stellar monitor Bull job scheduled every 30 seconds');
+  }
+
   async scanPendingPayments() {
     const pendingPayments = await this.paymentsRepo.find({
       where: { status: PaymentStatus.PENDING },

@@ -10,6 +10,12 @@ import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { PaginatedResponseDto } from '../common/dto/pagination.dto';
 
+export interface PartnerCallbackPayload {
+  reference: string;
+  status: 'success' | 'failed';
+  failureReason?: string;
+}
+
 @Injectable()
 export class SettlementsService {
   private readonly logger = new Logger(SettlementsService.name);
@@ -118,5 +124,49 @@ export class SettlementsService {
     });
 
     return PaginatedResponseDto.of(data, total, page, limit);
+  }
+
+  async handlePartnerCallback(payload: PartnerCallbackPayload): Promise<void> {
+    const settlement = await this.settlementsRepo.findOne({
+      where: { id: payload.reference },
+    });
+
+    if (!settlement) {
+      this.logger.warn(`Partner callback for unknown settlement reference: ${payload.reference}`);
+      return;
+    }
+
+    const payment = await this.paymentsRepo.findOne({
+      where: { settlementId: settlement.id },
+    });
+
+    if (payload.status === 'success') {
+      settlement.status = SettlementStatus.COMPLETED;
+      settlement.completedAt = new Date();
+      await this.settlementsRepo.save(settlement);
+
+      if (payment) {
+        payment.status = PaymentStatus.SETTLED;
+        await this.paymentsRepo.save(payment);
+        await this.webhooks.dispatch(settlement.merchantId, 'payment.settled', {
+          paymentId: payment.id,
+          settlementId: settlement.id,
+          amount: settlement.netAmountUsd,
+        });
+      }
+    } else {
+      settlement.status = SettlementStatus.FAILED;
+      settlement.failureReason = payload.failureReason ?? 'Partner reported failure';
+      await this.settlementsRepo.save(settlement);
+
+      if (payment) {
+        payment.status = PaymentStatus.FAILED;
+        await this.paymentsRepo.save(payment);
+        await this.webhooks.dispatch(settlement.merchantId, 'payment.failed', {
+          paymentId: payment.id,
+          reason: settlement.failureReason,
+        });
+      }
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment, PaymentStatus } from '../payments/entities/payment.entity';
+import { Payment, PaymentNetwork, PaymentStatus } from '../payments/entities/payment.entity';
 
 @Injectable()
 export class AnalyticsService {
@@ -124,6 +124,62 @@ export class AnalyticsService {
       .getRawOne();
 
     return parseFloat(result?.total || 0);
+  }
+
+  async getNetworkBreakdown(merchantId: string, sortBy: 'volume' | 'count' = 'volume', period: 'daily' | 'monthly' = 'daily') {
+    const cacheKey = `networks:${merchantId}:${sortBy}:${period}`;
+    return this.getCachedData(cacheKey, async () => {
+      const dateFormat = period === 'daily' ? 'YYYY-MM-DD' : 'YYYY-MM';
+
+      const [rows, trendRows] = await Promise.all([
+        this.paymentsRepo
+          .createQueryBuilder('payment')
+          .select('payment.network', 'network')
+          .addSelect('COUNT(*)', 'count')
+          .addSelect('COALESCE(SUM(payment.amountUsd), 0)', 'volumeUsd')
+          .where('payment.merchantId = :merchantId', { merchantId })
+          .andWhere('payment.status = :status', { status: PaymentStatus.SETTLED })
+          .groupBy('payment.network')
+          .getRawMany(),
+        this.paymentsRepo
+          .createQueryBuilder('payment')
+          .select('payment.network', 'network')
+          .addSelect(`TO_CHAR(payment.createdAt, '${dateFormat}')`, 'date')
+          .addSelect('COUNT(*)', 'count')
+          .addSelect('COALESCE(SUM(payment.amountUsd), 0)', 'volumeUsd')
+          .where('payment.merchantId = :merchantId', { merchantId })
+          .andWhere('payment.status = :status', { status: PaymentStatus.SETTLED })
+          .groupBy('payment.network')
+          .addGroupBy('date')
+          .orderBy('date', 'ASC')
+          .getRawMany(),
+      ]);
+
+      const totals = rows.reduce((s, r) => ({ volume: s.volume + parseFloat(r.volumeUsd), count: s.count + parseInt(r.count) }), { volume: 0, count: 0 });
+
+      const byNetwork = new Map(rows.map((r) => [r.network, { count: parseInt(r.count), volumeUsd: parseFloat(r.volumeUsd) }]));
+
+      const trendByNetwork = new Map<string, { date: string; count: number; volumeUsd: number }[]>();
+      for (const r of trendRows) {
+        if (!trendByNetwork.has(r.network)) trendByNetwork.set(r.network, []);
+        trendByNetwork.get(r.network).push({ date: r.date, count: parseInt(r.count), volumeUsd: parseFloat(r.volumeUsd) });
+      }
+
+      const networks = Object.values(PaymentNetwork).map((network) => {
+        const data = byNetwork.get(network) ?? { count: 0, volumeUsd: 0 };
+        return {
+          network,
+          count: data.count,
+          volumeUsd: data.volumeUsd,
+          percentOfTotal: totals.volume > 0 ? parseFloat(((data.volumeUsd / totals.volume) * 100).toFixed(2)) : 0,
+          trend: trendByNetwork.get(network) ?? [],
+        };
+      });
+
+      networks.sort((a, b) => (sortBy === 'count' ? b.count - a.count : b.volumeUsd - a.volumeUsd));
+
+      return { networks, totals };
+    });
   }
 
   clearCache() {

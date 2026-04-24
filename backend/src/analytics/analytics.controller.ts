@@ -29,4 +29,16 @@ export class AnalyticsController {
   async getComparison(@Request() req, @Query('period') period: 'daily' | 'monthly' = 'daily') {
     return this.analyticsService.getComparison(req.user.merchantId, period);
   }
+
+  @Get('networks')
+  @ApiOperation({ summary: 'Get payment volume breakdown by blockchain network' })
+  @ApiQuery({ name: 'sortBy', enum: ['volume', 'count'], required: false })
+  @ApiQuery({ name: 'period', enum: ['daily', 'monthly'], required: false })
+  async getNetworkBreakdown(
+    @Request() req,
+    @Query('sortBy') sortBy: 'volume' | 'count' = 'volume',
+    @Query('period') period: 'daily' | 'monthly' = 'daily',
+  ) {
+    return this.analyticsService.getNetworkBreakdown(req.user.merchantId, sortBy, period);
+  }
 }

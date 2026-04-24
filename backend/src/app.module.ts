@@ -11,6 +11,7 @@ import { AmlModule } from './aml/aml.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { MerchantAnalyticsModule } from './analytics/merchant-analytics.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { GroupsModule } from './groups/groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -85,6 +86,7 @@ import { HttpMetricsInterceptor } from './prometheus/http-metrics.interceptor';
     EmailModule,
     AdminModule,
     AmlModule,
+    AnalyticsModule,
     MerchantAnalyticsModule,
     AdminAlertModule,
     AuthModule,

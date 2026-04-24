@@ -17,6 +17,12 @@ export enum MerchantStatus {
   PENDING = 'pending',
 }
 
+export enum MerchantRole {
+  ADMIN = 'admin',
+  MERCHANT = 'merchant',
+  SUPERADMIN = 'superadmin',
+}
+
 @Entity('merchants')
 export class Merchant {
   @PrimaryGeneratedColumn('uuid')
@@ -51,6 +57,9 @@ export class Merchant {
   @Column({ type: 'enum', enum: MerchantStatus, default: MerchantStatus.PENDING })
   status: MerchantStatus;
 
+  @Column({ type: 'enum', enum: MerchantRole, default: MerchantRole.MERCHANT })
+  role: MerchantRole;
+
   @Column({ nullable: true })
   apiKey: string;
 
@@ -63,6 +72,29 @@ export class Merchant {
 
   @Column({ type: 'decimal', precision: 5, scale: 4, default: 0.015 })
   feeRate: number;
+
+  /** Per-merchant custom fee rate override. Null means use global default. */
+  @Column({
+    name: 'custom_fee_rate',
+    type: 'numeric',
+    precision: 7,
+    scale: 6,
+    nullable: true,
+    default: null,
+  })
+  customFeeRate: string | null;
+
+  @Column({ default: false })
+  sandboxMode: boolean;
+
+  @Column({ nullable: true })
+  totpSecret: string | null;
+
+  @Column({ default: false })
+  totpEnabled: boolean;
+
+  @Column({ nullable: true, type: 'text' })
+  allowedIps: string | null;
 
   @OneToMany(() => Payment, (payment) => payment.merchant)
   payments: Payment[];

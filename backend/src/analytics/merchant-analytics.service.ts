@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -34,8 +34,25 @@ export interface MerchantAnalyticsResponse {
   };
 }
 
+export interface TopMerchant {
+  businessName: string;
+  volume: number;
+  paymentCount: number;
+  settlementCount: number;
+  country: string;
+}
+
+export interface TopMerchantsResponse {
+  merchants: TopMerchant[];
+  period: string;
+  generatedAt: string;
+}
+
 @Injectable()
 export class MerchantAnalyticsService {
+  private readonly logger = new Logger(MerchantAnalyticsService.name);
+  private readonly topMerchantsCache = new Map<string, { data: TopMerchantsResponse; expiresAt: number }>();
+
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
   async getMetrics(asOf = new Date()): Promise<MerchantAnalyticsResponse> {
@@ -126,5 +143,77 @@ export class MerchantAnalyticsService {
     }
 
     return series;
+  }
+
+  async getTopMerchants(limit: number = 10, period: string = '30d'): Promise<TopMerchantsResponse> {
+    const cacheKey = `${limit}-${period}`;
+    const cached = this.topMerchantsCache.get(cacheKey);
+    
+    if (cached && cached.expiresAt > Date.now()) {
+      this.logger.debug(`Returning cached top merchants for ${cacheKey}`);
+      return cached.data;
+    }
+
+    const periodDays = this.getPeriodDays(period);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - periodDays);
+
+    const query = `
+      SELECT 
+        m."businessName",
+        COALESCE(SUM(p."amountUsd"), 0)::decimal AS volume,
+        COUNT(p.id)::int AS "paymentCount",
+        COUNT(DISTINCT p."settlementId") FILTER (WHERE p."settlementId" IS NOT NULL)::int AS "settlementCount",
+        m.country
+      FROM merchants m
+      LEFT JOIN payments p ON m.id = p."merchantId" 
+        AND p."createdAt" >= $1
+        AND p.status IN ('confirmed', 'settling', 'settled')
+      WHERE m.status = 'active'
+      GROUP BY m.id, m."businessName", m.country
+      ORDER BY volume DESC, "paymentCount" DESC
+      LIMIT $2
+    `;
+
+    try {
+      const merchants = await this.dataSource.query(query, [cutoffDate.toISOString(), limit]);
+      
+      const response: TopMerchantsResponse = {
+        merchants: merchants.map((row: any) => ({
+          businessName: row.businessName,
+          volume: parseFloat(row.volume),
+          paymentCount: row.paymentCount,
+          settlementCount: row.settlementCount,
+          country: row.country || 'Unknown',
+        })),
+        period,
+        generatedAt: new Date().toISOString(),
+      };
+
+      // Cache for 10 minutes
+      this.topMerchantsCache.set(cacheKey, {
+        data: response,
+        expiresAt: Date.now() + 10 * 60 * 1000,
+      });
+
+      this.logger.debug(`Generated top merchants for ${cacheKey}: ${merchants.length} results`);
+      return response;
+    } catch (error) {
+      this.logger.error(`Failed to get top merchants: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  private getPeriodDays(period: string): number {
+    switch (period) {
+      case '7d':
+        return 7;
+      case '30d':
+        return 30;
+      case '90d':
+        return 90;
+      default:
+        return 30;
+    }
   }
 }

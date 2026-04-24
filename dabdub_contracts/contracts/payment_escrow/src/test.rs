@@ -81,6 +81,7 @@ fn test_deposit_happy_path() {
 
     assert_eq!(result, payment_id);
     assert_eq!(payment.amount, 250_000_000);
+    assert_eq!(payment.released_amount, 0);
     assert_eq!(payment.customer, customer.clone());
     assert_eq!(payment.merchant, merchant.clone());
     assert_eq!(payment.status, PaymentStatus::Pending);
@@ -184,10 +185,67 @@ fn test_release_happy_path() {
 
     let payment = client.get_payment(&payment_id);
     assert_eq!(payment.status, PaymentStatus::Released);
+    assert_eq!(payment.released_amount, 250_000_000);
     assert_eq!(client.get_balance(&payment_id), 0);
 
     let token_client = token::Client::new(&env, &usdc);
     assert_eq!(token_client.balance(&merchant), 250_000_000);
+    assert_eq!(token_client.balance(&contract_id), 0);
+}
+
+#[test]
+fn test_partial_release_multiple_steps() {
+    let (env, client, contract_id, admin, customer, merchant, usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release_partial(&admin, &payment_id, &100_000_000i128);
+
+    let payment = client.get_payment(&payment_id);
+    assert_eq!(payment.status, PaymentStatus::Pending);
+    assert_eq!(payment.released_amount, 100_000_000);
+    assert_eq!(client.get_balance(&payment_id), 150_000_000);
+
+    client.release_partial(&admin, &payment_id, &150_000_000i128);
+
+    let payment = client.get_payment(&payment_id);
+    assert_eq!(payment.status, PaymentStatus::Released);
+    assert_eq!(payment.released_amount, 250_000_000);
+    assert_eq!(client.get_balance(&payment_id), 0);
+
+    let token_client = token::Client::new(&env, &usdc);
+    assert_eq!(token_client.balance(&merchant), 250_000_000);
+    assert_eq!(token_client.balance(&contract_id), 0);
+}
+
+#[test]
+#[should_panic(expected = "Release amount exceeds remaining balance")]
+fn test_partial_release_prevents_over_release() {
+    let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release_partial(&admin, &payment_id, &200_000_000i128);
+    client.release_partial(&admin, &payment_id, &100_000_000i128);
+}
+
+#[test]
+fn test_refund_returns_remaining_balance_after_partial_release() {
+    let (env, client, contract_id, admin, customer, merchant, usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release_partial(&admin, &payment_id, &100_000_000i128);
+    env.ledger().set_sequence_number(111);
+    client.refund(&payment_id);
+
+    let payment = client.get_payment(&payment_id);
+    assert_eq!(payment.status, PaymentStatus::Expired);
+    assert_eq!(client.get_balance(&payment_id), 0);
+
+    let token_client = token::Client::new(&env, &usdc);
+    assert_eq!(token_client.balance(&merchant), 100_000_000);
+    assert_eq!(token_client.balance(&customer), 900_000_000);
     assert_eq!(token_client.balance(&contract_id), 0);
 }
 
@@ -200,6 +258,17 @@ fn test_release_unauthorized() {
 
     deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
     client.release(&random, &payment_id);
+}
+
+#[test]
+#[should_panic(expected = "Not admin")]
+fn test_partial_release_unauthorized() {
+    let (env, client, _contract_id, _admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+    let random = Address::generate(&env);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release_partial(&random, &payment_id, &10_000_000i128);
 }
 
 #[test]
@@ -223,7 +292,19 @@ fn test_release_expired_payment() {
 }
 
 #[test]
-#[should_panic(expected = "Payment is not pending")]
+#[should_panic(expected = "Payment expired")]
+fn test_partial_release_expired_payment() {
+    let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    env.ledger().set_sequence_number(111);
+
+    client.release_partial(&admin, &payment_id, &10_000_000i128);
+}
+
+#[test]
+#[should_panic(expected = "Payment fully released")]
 fn test_release_already_settled_payment() {
     let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
     let payment_id = make_id(&env, 1);
@@ -231,6 +312,27 @@ fn test_release_already_settled_payment() {
     deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
     client.release(&admin, &payment_id);
     client.release(&admin, &payment_id);
+}
+
+#[test]
+#[should_panic(expected = "Release amount must be > 0")]
+fn test_partial_release_zero_amount() {
+    let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release_partial(&admin, &payment_id, &0i128);
+}
+
+#[test]
+#[should_panic(expected = "Payment fully released")]
+fn test_partial_release_fully_released_payment() {
+    let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.release(&admin, &payment_id);
+    client.release_partial(&admin, &payment_id, &1i128);
 }
 
 #[test]
@@ -279,6 +381,7 @@ fn test_dispute_by_customer() {
         payment.dispute_reason,
         Some(String::from_str(&env, "service not delivered"))
     );
+    assert_eq!(client.get_balance(&payment_id), 250_000_000);
 }
 
 #[test]
@@ -347,6 +450,21 @@ fn test_release_blocked_while_disputed() {
 
 #[test]
 #[should_panic(expected = "Dispute is open")]
+fn test_partial_release_blocked_while_disputed() {
+    let (env, client, _contract_id, admin, customer, merchant, _usdc) = setup_env();
+    let payment_id = make_id(&env, 1);
+
+    deposit_default_ttl(&client, &customer, &payment_id, &merchant, 250_000_000i128);
+    client.dispute(
+        &merchant,
+        &payment_id,
+        &String::from_str(&env, "hold release"),
+    );
+    client.release_partial(&admin, &payment_id, &10_000_000i128);
+}
+
+#[test]
+#[should_panic(expected = "Dispute is open")]
 fn test_expire_blocked_while_disputed() {
     let (env, client, _contract_id, _admin, customer, merchant, _usdc) = setup_env();
     let payment_id = make_id(&env, 1);
@@ -376,6 +494,7 @@ fn test_resolve_dispute_to_customer() {
 
     let payment = client.get_payment(&payment_id);
     assert_eq!(payment.status, PaymentStatus::Expired);
+    assert_eq!(payment.released_amount, 250_000_000);
 
     let token_client = token::Client::new(&env, &usdc);
     assert_eq!(token_client.balance(&customer), 1_000_000_000);
@@ -397,6 +516,7 @@ fn test_resolve_dispute_to_merchant() {
 
     let payment = client.get_payment(&payment_id);
     assert_eq!(payment.status, PaymentStatus::Released);
+    assert_eq!(payment.released_amount, 250_000_000);
 
     let token_client = token::Client::new(&env, &usdc);
     assert_eq!(token_client.balance(&merchant), 250_000_000);

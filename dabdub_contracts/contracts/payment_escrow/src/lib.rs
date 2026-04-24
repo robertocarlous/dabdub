@@ -20,6 +20,7 @@ pub enum PaymentStatus {
 pub struct PaymentEscrow {
     pub payment_id: BytesN<32>,
     pub amount: i128,
+    pub released_amount: i128,
     pub merchant: Address,
     pub customer: Address,
     pub status: PaymentStatus,
@@ -48,6 +49,13 @@ struct DepositEvent {
 
 #[contractevent(topics = ["ESCROW", "release"])]
 struct ReleaseEvent {
+    payment_id: BytesN<32>,
+    merchant: Address,
+    amount: i128,
+}
+
+#[contractevent(topics = ["ESCROW", "partial_release"])]
+struct PartialReleaseEvent {
     payment_id: BytesN<32>,
     merchant: Address,
     amount: i128,
@@ -141,6 +149,7 @@ impl PaymentEscrowContract {
         let payment = PaymentEscrow {
             payment_id: payment_id.clone(),
             amount,
+            released_amount: 0,
             merchant: merchant.clone(),
             customer: customer.clone(),
             status: PaymentStatus::Pending,
@@ -168,20 +177,15 @@ impl PaymentEscrowContract {
         Self::require_admin(&env, &caller);
 
         let mut payment = Self::get_payment(env.clone(), payment_id.clone());
-        Self::require_releasable(&payment);
+        Self::require_releasable(&env, &payment);
 
-        if env.ledger().sequence() > payment.expiry {
-            panic!("Payment expired");
+        let remaining = Self::remaining_amount(&payment);
+        if remaining <= 0 {
+            panic!("Payment fully released");
         }
 
-        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
-        token_client.transfer(
-            &env.current_contract_address(),
-            &payment.merchant,
-            &payment.amount,
-        );
-
+        Self::transfer_from_contract(&env, &payment.merchant, remaining);
+        payment.released_amount = payment.amount;
         payment.status = PaymentStatus::Released;
         env.storage()
             .persistent()
@@ -190,7 +194,43 @@ impl PaymentEscrowContract {
         ReleaseEvent {
             payment_id,
             merchant: payment.merchant,
-            amount: payment.amount,
+            amount: remaining,
+        }
+        .publish(&env);
+    }
+
+    pub fn release_partial(env: Env, caller: Address, payment_id: BytesN<32>, amount: i128) {
+        caller.require_auth();
+        Self::require_admin(&env, &caller);
+
+        if amount <= 0 {
+            panic!("Release amount must be > 0");
+        }
+
+        let mut payment = Self::get_payment(env.clone(), payment_id.clone());
+        Self::require_releasable(&env, &payment);
+
+        let remaining = Self::remaining_amount(&payment);
+        if remaining <= 0 {
+            panic!("Payment fully released");
+        }
+        if amount > remaining {
+            panic!("Release amount exceeds remaining balance");
+        }
+
+        Self::transfer_from_contract(&env, &payment.merchant, amount);
+        payment.released_amount += amount;
+        if payment.released_amount == payment.amount {
+            payment.status = PaymentStatus::Released;
+        }
+        env.storage()
+            .persistent()
+            .set(&DataKey::Payment(payment_id.clone()), &payment);
+
+        PartialReleaseEvent {
+            payment_id,
+            merchant: payment.merchant,
+            amount,
         }
         .publish(&env);
     }
@@ -201,20 +241,15 @@ impl PaymentEscrowContract {
 
     pub fn refund(env: Env, payment_id: BytesN<32>) {
         let mut payment = Self::get_payment(env.clone(), payment_id.clone());
-        Self::require_expirable(&payment);
+        Self::require_expirable(&env, &payment);
 
-        if env.ledger().sequence() <= payment.expiry {
-            panic!("Payment has not expired");
+        let remaining = Self::remaining_amount(&payment);
+        if remaining <= 0 {
+            panic!("Payment fully released");
         }
 
-        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
-        token_client.transfer(
-            &env.current_contract_address(),
-            &payment.customer,
-            &payment.amount,
-        );
-
+        Self::transfer_from_contract(&env, &payment.customer, remaining);
+        payment.released_amount = payment.amount;
         payment.status = PaymentStatus::Expired;
         env.storage()
             .persistent()
@@ -223,7 +258,7 @@ impl PaymentEscrowContract {
         ExpiryEvent {
             payment_id,
             customer: payment.customer,
-            amount: payment.amount,
+            amount: remaining,
         }
         .publish(&env);
     }
@@ -271,15 +306,18 @@ impl PaymentEscrowContract {
             panic!("Invalid dispute winner");
         }
 
-        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
-        token_client.transfer(&env.current_contract_address(), &winner, &payment.amount);
+        let remaining = Self::remaining_amount(&payment);
+        if remaining <= 0 {
+            panic!("Payment fully released");
+        }
 
+        Self::transfer_from_contract(&env, &winner, remaining);
         payment.status = if winner == payment.merchant {
             PaymentStatus::Released
         } else {
             PaymentStatus::Expired
         };
+        payment.released_amount = payment.amount;
         env.storage()
             .persistent()
             .set(&DataKey::Payment(payment_id.clone()), &payment);
@@ -287,7 +325,7 @@ impl PaymentEscrowContract {
         DisputeResolvedEvent {
             payment_id,
             winner,
-            amount: payment.amount,
+            amount: remaining,
         }
         .publish(&env);
     }
@@ -301,11 +339,7 @@ impl PaymentEscrowContract {
 
     pub fn get_balance(env: Env, payment_id: BytesN<32>) -> i128 {
         let payment = Self::get_payment(env, payment_id);
-        if payment.status == PaymentStatus::Pending {
-            payment.amount
-        } else {
-            0
-        }
+        Self::remaining_amount(&payment)
     }
 
     pub fn get_expiry(env: Env, payment_id: BytesN<32>) -> u32 {
@@ -342,21 +376,43 @@ impl PaymentEscrowContract {
         }
     }
 
-    fn require_releasable(payment: &PaymentEscrow) {
+    fn require_releasable(env: &Env, payment: &PaymentEscrow) {
         if payment.status == PaymentStatus::Disputed {
             panic!("Dispute is open");
         }
-        if payment.status != PaymentStatus::Pending {
-            panic!("Payment is not pending");
+        if payment.status == PaymentStatus::Released {
+            panic!("Payment fully released");
+        }
+        if payment.status == PaymentStatus::Expired {
+            panic!("Payment expired");
+        }
+        if env.ledger().sequence() > payment.expiry {
+            panic!("Payment expired");
         }
     }
 
-    fn require_expirable(payment: &PaymentEscrow) {
+    fn require_expirable(env: &Env, payment: &PaymentEscrow) {
         if payment.status == PaymentStatus::Disputed {
             panic!("Dispute is open");
+        }
+        if payment.status == PaymentStatus::Released {
+            panic!("Payment fully released");
         }
         if payment.status != PaymentStatus::Pending {
             panic!("Payment is not pending");
         }
+        if env.ledger().sequence() <= payment.expiry {
+            panic!("Payment has not expired");
+        }
+    }
+
+    fn remaining_amount(payment: &PaymentEscrow) -> i128 {
+        payment.amount.saturating_sub(payment.released_amount)
+    }
+
+    fn transfer_from_contract(env: &Env, recipient: &Address, amount: i128) {
+        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+        let token_client = token::Client::new(env, &usdc_token);
+        token_client.transfer(&env.current_contract_address(), recipient, &amount);
     }
 }

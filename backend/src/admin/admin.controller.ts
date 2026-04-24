@@ -9,14 +9,17 @@ import {
   Query,
   Req,
   UseGuards,
+  Header,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { AdminService } from './admin.service';
 import { MerchantStatus, MerchantRole } from '../merchants/entities/merchant.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -150,27 +153,25 @@ export class AdminController {
     return this.adminService.resetSandboxData(id);
   }
 
-  @Get('fees')
-  @Roles(AdminRole.ADMIN, AdminRole.SUPERADMIN)
-  @ApiOperation({ summary: 'List all global fee configurations' })
-  async getFees() {
-    return this.adminService.getGlobalFees();
-  }
+  // ── Audit Log Viewer ───────────────────────────────────────────────────────
 
-  @Patch('fees')
-  @Roles(AdminRole.ADMIN, AdminRole.SUPERADMIN)
-  @Audit({ action: 'fee.update', resourceType: 'fee-config' })
-  @ApiOperation({ summary: 'Update a global fee rate' })
-  async updateFee(
-    @Body() dto: { feeType: string; newRate: string; reason?: string },
-    @Req() req: any,
+  @Get('audit-log')
+  @ApiOperation({ summary: 'Get paginated audit log with filtering' })
+  async getAuditLogs(
+    @Query() query: any,
+    @Query() pagination: PaginationDto,
+    @Query('export') exportType?: string,
+    @Header('Accept') accept?: string,
+    @Res() res: Response,
   ) {
-    const adminId = req.user.id;
-    return this.adminService.updateGlobalFee(
-      dto.feeType as any,
-      dto.newRate,
-      adminId,
-      dto.reason,
-    );
+    const exportCsv = exportType === 'csv' || accept === 'text/csv';
+    const result = await this.adminService.getAuditLogs(query, pagination, exportCsv);
+    if (exportCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="audit-log.csv"');
+      res.send(result);
+    } else {
+      res.json(result);
+    }
   }
 }
